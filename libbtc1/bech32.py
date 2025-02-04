@@ -40,9 +40,9 @@ def decode_bech32_identifier(value):
     # identifier = int_to_big_endian(number, num_bytes)
     # if num_bytes < 2 or num_bytes > 40:
     #     raise ValueError(f"bytes out of range: {num_bytes}")
-    identifier = bytes(convertbits(data, 5, 8, False))
+    genesis_bytes = bytes(convertbits(data, 5, 8, False))
 
-    return [type, identifier]
+    return [hrp, genesis_bytes]
     
 
 
