@@ -10,7 +10,7 @@ setup(
     install_requires=requirements,
     author='Will Abramson',
     author_email='will@legreq.com',
-    description='A short description of your package',
+    description='Experimental python implementation of the did:btc1 Method Specification',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     # url='https://github.com/yourusername/mypackage',

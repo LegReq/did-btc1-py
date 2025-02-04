@@ -1,3 +1,2 @@
-buidl
+buidl @ git+https://github.com/buidl-bitcoin/buidl-python
 multiformats
-unitest

@@ -1,5 +1,6 @@
 from buidl.bech32 import bc32encode, BECH32_ALPHABET, encode_bech32, convertbits, bech32m_create_checksum, bech32m_verify_checksum
 from buidl.helper import int_to_big_endian
+
 PREFIX = {
     "key": "k",
     "external": "x"
