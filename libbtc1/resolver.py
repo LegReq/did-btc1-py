@@ -11,7 +11,7 @@ P2WPKH = "p2wpkh"
 P2TR = "p2tr"
 
 
-def resolve(identifier, resolution_options):
+def resolve(identifier, resolution_options=None):
     identifier_components = parse_btc1_identifier(identifier)
 
     hrp = identifier_components["hrp"]
