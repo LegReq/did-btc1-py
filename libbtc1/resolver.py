@@ -1,7 +1,7 @@
 from buidl.ecc import S256Point
 import re
-from bech32 import decode_bech32_identifier
-from verificationMethod import get_verification_method
+from .bech32 import decode_bech32_identifier
+from .verificationMethod import get_verification_method
 
 CONTEXT = ["https://www.w3.org/ns/did/v1", "https://did-btc1/TBD/context"]
 
