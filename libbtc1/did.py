@@ -37,7 +37,8 @@ def create_deterministic(public_key, network=None, version=None):
     bech32_id = encode_bech32_identifier(KEY, sec_pubkey)
 
     did_btc1 = f"did:btc1{versionStr}{networkStr}:{bech32_id}"
-    did_document = resolve(did_btc1)
+    resolution_options = {}
+    did_document = resolve(did_btc1, resolution_options)
 
     return did_btc1, did_document
 
