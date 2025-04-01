@@ -2,10 +2,7 @@ from buidl.ecc import S256Point
 import re
 from .bech32 import decode_bech32_identifier
 from .verificationMethod import get_verification_method
-<<<<<<< HEAD
-=======
 from .did import decode_identifier, KEY, EXTERNAL
->>>>>>> 038d29e (implement new identifier syntax)
 
 CONTEXT = ["https://www.w3.org/ns/did/v1", "https://did-btc1/TBD/context"]
 
@@ -16,11 +13,7 @@ P2TR = "p2tr"
 
 
 def resolve(identifier, resolution_options=None):
-<<<<<<< HEAD
-    identifier_components = parse_btc1_identifier(identifier)
-=======
     id_type, version, network, genesis_bytes = decode_identifier(identifier)
->>>>>>> 038d29e (implement new identifier syntax)
 
     if id_type == KEY:
         initial_did_document = resolve_deterministic(identifier, 

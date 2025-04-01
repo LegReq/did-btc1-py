@@ -2,7 +2,6 @@ from buidl.ecc import S256Point
 import math
 
 from .bech32 import encode_bech32_identifier, decode_bech32_identifier
-from .resolver import resolve
 from.verificationMethod import get_verification_method
 
 from .error import InvalidDidError
