@@ -37,25 +37,25 @@ def main():
 
     print(genesis_bytes.hex())
 
-    identifier = encode_identifier("key", 1, 5, genesis_bytes)
+    identifier = encode_identifier("key", 1, "bitcoin", genesis_bytes)
 
     print(identifier)
 
     did_document = resolve(identifier)
 
-    # print(json.dumps(did_document,))
+    print(json.dumps(did_document,indent=2))
 
 
-    external_document = {"id": "did:btc1:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "@context": ["https://www.w3.org/ns/did/v1", "https://did-btc1/TBD/context"], "verificationMethod": [{"id": "#initialKey", "type": "Multikey", "controller": "did:btc1:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "publicKeyMultibase": "z66Pmhojmn1jLPcLCLkK5Sv3Cjz5NxvA6Fn4mALJXhNzpgfC"}], "authentication": ["#initialKey"], "assertionMethod": ["#initialKey"], "capabilityInvocation": ["#initialKey"], "capabilityDelegation": ["#initialKey"], "service": [{"id": "#initial_p2pkh", "type": "SingletonBeacon", "serviceEndpoint": "bitcoin:mfzBTMBvzyG4KXJeWDyGPq4Jbv3bhQbNvw"}, {"id": "#initial_p2wpkh", "type": "SingletonBeacon", "serviceEndpoint": "bitcoin:bcrt1qq5nrwuhfqhte96pnc0kh0p9kxsnxnmdnw22pag"}, {"id": "#initial_p2tr", "type": "SingletonBeacon", "serviceEndpoint": "bitcoin:bcrt1phpuvck53vp3zad5sjxxep29f8a7p2clfef9t65munnqlqul9qdgqpcr2ev"}]}
+    # external_document = {"id": "did:btc1:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "@context": ["https://www.w3.org/ns/did/v1", "https://did-btc1/TBD/context"], "verificationMethod": [{"id": "#initialKey", "type": "Multikey", "controller": "did:btc1:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "publicKeyMultibase": "z66Pmhojmn1jLPcLCLkK5Sv3Cjz5NxvA6Fn4mALJXhNzpgfC"}], "authentication": ["#initialKey"], "assertionMethod": ["#initialKey"], "capabilityInvocation": ["#initialKey"], "capabilityDelegation": ["#initialKey"], "service": [{"id": "#initial_p2pkh", "type": "SingletonBeacon", "serviceEndpoint": "bitcoin:mfzBTMBvzyG4KXJeWDyGPq4Jbv3bhQbNvw"}, {"id": "#initial_p2wpkh", "type": "SingletonBeacon", "serviceEndpoint": "bitcoin:bcrt1qq5nrwuhfqhte96pnc0kh0p9kxsnxnmdnw22pag"}, {"id": "#initial_p2tr", "type": "SingletonBeacon", "serviceEndpoint": "bitcoin:bcrt1phpuvck53vp3zad5sjxxep29f8a7p2clfef9t65munnqlqul9qdgqpcr2ev"}]}
 
 
-    external_genesis_bytes = sha256(jcs.canonicalize(external_document))
+    # external_genesis_bytes = sha256(jcs.canonicalize(external_document))
 
 
-    identifier = encode_identifier("external", 1, "testnet4", external_genesis_bytes)
+    # identifier = encode_identifier("external", 1, "testnet4", external_genesis_bytes)
 
-    print("external DID", identifier)
-    print("genesis", external_genesis_bytes.hex())
+    # print("external DID", identifier)
+    # print("genesis", external_genesis_bytes.hex())
 
     # print(identifier)
 

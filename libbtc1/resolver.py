@@ -1,8 +1,14 @@
 from buidl.ecc import S256Point
 import re
+
+from pydid.doc.builder import VerificationMethodBuilder
+from pydid.verification_method import Multikey
+
 from .bech32 import decode_bech32_identifier
 from .verificationMethod import get_verification_method
 from .did import decode_identifier, KEY, EXTERNAL
+from .diddoc.builder import Btc1DIDDocumentBuilder
+from .multikey import get_public_key_multibase
 
 CONTEXT = ["https://www.w3.org/ns/did/v1", "https://did-btc1/TBD/context"]
 
@@ -28,66 +34,48 @@ def resolve(identifier, resolution_options=None):
     # TODO: Process Beacon Signals
 
     did_document = initial_did_document
-    return did_document
+    return did_document.serialize()
 
 
 
 def resolve_deterministic(btc1_identifier, key_bytes, version, network):
-    did_document = {}
-    did_document["id"] = btc1_identifier
-    did_document["@context"] = CONTEXT
 
-    initial_key = S256Point.parse_sec(key_bytes)
+    builder = Btc1DIDDocumentBuilder(btc1_identifier, CONTEXT, controller=btc1_identifier)
 
     vm_id = "#initialKey"
-    vm = get_verification_method(btc1_identifier, initial_key, vm_id)
 
-    did_document["verificationMethod"] = [vm]
+    public_key_multibase = get_public_key_multibase(key_bytes)
 
-    did_document["authentication"] = [vm_id]
-    did_document["assertionMethod"] = [vm_id]
-    did_document["capabilityInvocation"] = [vm_id]
-    did_document["capabilityDelegation"] = [vm_id]
+    verificationMethod = builder.verification_method.add(Multikey, vm_id, controller=btc1_identifier, public_key_multibase=public_key_multibase)
 
-    did_document["service"] = deterministically_generate_beacon_services(initial_key, network)
-    return did_document
+    # vm = get_verification_method(btc1_identifier, initial_key, vm_id)
 
+    # did_document["verificationMethod"] = [vm]
 
-def deterministically_generate_beacon_services(pubkey: S256Point, network):
+    builder.authentication.reference(verificationMethod.id)
+    builder.assertion_method.reference(verificationMethod.id)
+    builder.capability_delegation.reference(verificationMethod.id)
+    builder.capability_invocation.reference(verificationMethod.id)
 
+    if network == "bitcoin":
+        network = "mainnet"
     if network == "testnet3" or network == "testnet4":
         network = "testnet"
     elif isinstance(network, int):
         # TODO: what should network be when custom?
         network = "signet"
-    
 
-    p2pkh_beacon = generate_singleton_beacon_service(pubkey, "#initial_p2pkh", 
-                                                     P2PKH, network)
-    p2wpkh_beacon = generate_singleton_beacon_service(pubkey, "#initial_p2wpkh", 
-                                                      P2WPKH, network)
-    p2tr_beacon = generate_singleton_beacon_service(pubkey, "#initial_p2tr", 
-                                                    P2TR, network)
-    service = [p2pkh_beacon, p2wpkh_beacon, p2tr_beacon]
-    return service
+    pubkey = S256Point.parse_sec(key_bytes)
 
+    p2pkh_address = pubkey.p2pkh_script().address(network)
+    builder.service.add_singleton_beacon("#initialP2PKH", p2pkh_address)
 
-def generate_singleton_beacon_service(pubkey: S256Point, service_id, 
-                                      address_type, network):
-    if address_type == P2PKH:
-        address = pubkey.p2pkh_script().address(network)
-    elif address_type == P2WPKH:
-        address = pubkey.p2wpkh_address(network=network)
-    elif address_type == P2TR:
-        address = pubkey.p2tr_address(network=network)
-    else:
-        raise Exception(f"Address Type {address_type} Not recognised")
-    
-    bip21_address_uri = f"bitcoin:{address}"
-    beacon_service = {
-        "id": service_id,
-        "type": SINGLETON_BEACON_TYPE,
-        "serviceEndpoint": bip21_address_uri
-    }
+    p2wpkh_address = pubkey.p2wpkh_address(network=network)
+    builder.service.add_singleton_beacon("#initialP2WPKH", p2wpkh_address)
 
-    return beacon_service
+    p2tr_address = pubkey.p2tr_address(network=network)
+    builder.service.add_singleton_beacon("#initialP2TR", p2tr_address)
+
+    did_document = builder.build()
+
+    return did_document
