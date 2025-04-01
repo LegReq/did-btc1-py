@@ -9,13 +9,12 @@ PREFIX = {
 TYPE_FOR_PREFIX = {v: k for k, v in PREFIX.items()}
 
 
-def encode_bech32_identifier(type, value):
-    prefix = PREFIX.get(type)
+def encode_bech32_identifier(hrp, value):
     data = convertbits(value, 8, 5)
-    checksum = bech32m_create_checksum(prefix, data)
+    checksum = bech32m_create_checksum(hrp, data)
     encoded = encode_bech32(data + checksum)
 
-    return prefix + "1" + encoded
+    return hrp + "1" + encoded
 
 def decode_bech32_identifier(value):
     hrp, raw_data = value.split("1")

@@ -2,6 +2,10 @@ from buidl.ecc import S256Point
 import re
 from .bech32 import decode_bech32_identifier
 from .verificationMethod import get_verification_method
+<<<<<<< HEAD
+=======
+from .did import decode_identifier, KEY, EXTERNAL
+>>>>>>> 038d29e (implement new identifier syntax)
 
 CONTEXT = ["https://www.w3.org/ns/did/v1", "https://did-btc1/TBD/context"]
 
@@ -12,15 +16,18 @@ P2TR = "p2tr"
 
 
 def resolve(identifier, resolution_options=None):
+<<<<<<< HEAD
     identifier_components = parse_btc1_identifier(identifier)
+=======
+    id_type, version, network, genesis_bytes = decode_identifier(identifier)
+>>>>>>> 038d29e (implement new identifier syntax)
 
-    hrp = identifier_components["hrp"]
-    if hrp == "k":
+    if id_type == KEY:
         initial_did_document = resolve_deterministic(identifier, 
-                                                     identifier_components["genesis_bytes"], 
-                                                     identifier_components["version"], 
-                                                     identifier_components["network"])
-    elif hrp == "x":
+                                                    genesis_bytes, 
+                                                    version, 
+                                                   network)
+    elif id_type == EXTERNAL:
         pass
     else:
         raise "Invalid HRP"
@@ -29,27 +36,6 @@ def resolve(identifier, resolution_options=None):
 
     did_document = initial_did_document
     return did_document
-
-def parse_btc1_identifier(identifier):
-    identifier_components = {}
-
-    match = re.match(r"^did:btc1:(?:(\d+):)?(?:(mainnet|signet|testnet|regtest):)?((k1|x1)[023456789acdefghjklmnpqrstuvwxyz]*)$", identifier)
-
-    try:
-        # did = match.group()
-        identifier_components["version"] = match.group(1) or 1
-        identifier_components["network"] = match.group(2) or "mainnet"
-        bech32_encoding = match.group(3)
-        hrp, genesis_bytes = decode_bech32_identifier(bech32_encoding)
-        identifier_components["hrp"] = hrp
-        identifier_components["genesis_bytes"] = genesis_bytes
-    except:
-        raise "invalidDID Exception"
-
-
-    return identifier_components
-
-
 
 
 
@@ -75,6 +61,14 @@ def resolve_deterministic(btc1_identifier, key_bytes, version, network):
 
 
 def deterministically_generate_beacon_services(pubkey: S256Point, network):
+
+    if network == "testnet3" or network == "testnet4":
+        network = "testnet"
+    elif isinstance(network, int):
+        # TODO: what should network be when custom?
+        network = "signet"
+    
+
     p2pkh_beacon = generate_singleton_beacon_service(pubkey, "#initial_p2pkh", 
                                                      P2PKH, network)
     p2wpkh_beacon = generate_singleton_beacon_service(pubkey, "#initial_p2wpkh", 
