@@ -1,13 +1,19 @@
 from pydid.doc.builder import ServiceBuilder, DIDDocumentBuilder
 from pydid.did import DID
+from pydid.verification_method import Multikey
+
+from buidl.ecc import S256Point
 
 from ..service import SingletonBeaconService
+from ..did import PLACEHOLDER_DID, KEY
 from typing import Iterator, List, Optional, Type, Union
-
+from .doc import IntermediateBtc1DIDDocument
+from ..did import encode_identifier
+from ..multikey import get_public_key_multibase
 
 class Btc1ServiceBuilder(ServiceBuilder):
 
-    def add_singleton_beacon(self, ident, beacon_address):
+    def add_singleton_beacon(self, beacon_address: str, ident: Optional[str] = None):
         ident = ident or next(self._id_generator)
 
         service_endpoint = f"bitcoin:{beacon_address}"
@@ -18,6 +24,9 @@ class Btc1ServiceBuilder(ServiceBuilder):
 
         self.services.append(service)
         return service
+    
+
+
     
 
 class Btc1DIDDocumentBuilder(DIDDocumentBuilder):
@@ -33,7 +42,56 @@ class Btc1DIDDocumentBuilder(DIDDocumentBuilder):
         super().__init__(id=id, context=context, also_known_as=also_known_as, controller=controller)
         self.service = Btc1ServiceBuilder(self.id)
 
-    #     @classmethod
+    @staticmethod
+    def __default_context() -> List[str]:
+        return ["https://www.w3.org/ns/did/v1", "https://did-btc1/TBD/context"]
+    
+    @classmethod
+    def from_secp256k1_key(cls, initial_key: S256Point, network="bitcoin", version=1):
+        key_bytes = initial_key.sec()
+        did_btc1 = encode_identifier(KEY, version, network, key_bytes)
+
+        builder = cls(
+            id=did_btc1,
+            controller=did_btc1,
+        )
+
+        vm_id = "#initialKey"
+
+        public_key_multibase = get_public_key_multibase(key_bytes)
+
+        verificationMethod = builder.verification_method.add(Multikey, vm_id, controller=did_btc1, public_key_multibase=public_key_multibase)
+
+        # vm = get_verification_method(btc1_identifier, initial_key, vm_id)
+
+        # did_document["verificationMethod"] = [vm]
+
+        builder.authentication.reference(verificationMethod.id)
+        builder.assertion_method.reference(verificationMethod.id)
+        builder.capability_delegation.reference(verificationMethod.id)
+        builder.capability_invocation.reference(verificationMethod.id)
+
+        if network == "bitcoin":
+            network = "mainnet"
+        if network == "testnet3" or network == "testnet4":
+            network = "testnet"
+        elif isinstance(network, int):
+            # TODO: what should network be when custom?
+            network = "signet"
+
+        p2pkh_address = initial_key.p2pkh_script().address(network)
+        builder.service.add_singleton_beacon("#initialP2PKH", p2pkh_address)
+
+        p2wpkh_address = initial_key.p2wpkh_address(network=network)
+        builder.service.add_singleton_beacon("#initialP2WPKH", p2wpkh_address)
+
+        p2tr_address = initial_key.p2tr_address(network=network)
+        builder.service.add_singleton_beacon("#initialP2TR", p2tr_address)
+
+        return builder
+
+
+    # @classmethod
     # def from_doc(cls, doc: DIDDocument) -> "DIDDocumentBuilder":
     #     """Create a Builder from an existing DIDDocument."""
     #     builder = cls(
@@ -62,3 +120,31 @@ class Btc1DIDDocumentBuilder(DIDDocumentBuilder):
     #     )
     #     builder.service = Btc1ServiceBuilder(doc.id, services=doc.service)
     #     return builder
+
+
+class IntermediateBtc1DIDDocumentBuilder(Btc1DIDDocumentBuilder):
+    def __init__(
+        self,
+        context: List[str] = None,
+        *,
+        also_known_as: List[str] = None,
+        controller: Union[List[str], List[DID]] = None,
+    ):
+        super().__init__(id=PLACEHOLDER_DID, context=context, also_known_as=also_known_as, controller=controller)
+
+    def build(self) -> IntermediateBtc1DIDDocument:
+        return IntermediateBtc1DIDDocument(
+            context=self.context,
+            also_known_as=self.also_known_as,
+            controller=self.controller,
+            verification_method=self.verification_method.methods or None,
+            authentication=self.authentication.methods or None,
+            assertion_method=self.assertion_method.methods or None,
+            key_agreement=self.key_agreement.methods or None,
+            capability_invocation=self.capability_invocation.methods or None,
+            capability_delegation=self.capability_delegation.methods or None,
+            service=self.service.services or None,
+            **self.extra,
+        )
+
+    

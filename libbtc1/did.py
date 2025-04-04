@@ -12,7 +12,7 @@ TESTNET3="testnet3"
 TESTNET4="testnet4"
 REGTEST="regtest"
 
-NETWORKS = [BITCOIN, SIGNET, REGTEST, TESTNET3, TESTNET4]
+NETWORKS = [BITCOIN, SIGNET, REGTEST, TESTNET3, TESTNET4, None, None, None, 1, 2, 3, 4, 5, 6, 7, 8]
 
 VERSIONS = [1]
 
@@ -45,6 +45,7 @@ SINGLETON_BEACON_TYPE = "SingletonBeacon"
 
 CONTEXT = ["https://www.w3.org/ns/did/v1", "https://did-btc1/TBD/context"]
 
+PLACEHOLDER_DID = "did:btc1:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
 
 
@@ -57,14 +58,8 @@ def encode_identifier(id_type, version, network, genesis_bytes):
         raise InvalidDidError()
 
     network_num = None
-    if network not in NETWORKS:
-        try:
-            number = int(network)
-            if number < 0:
-                raise InvalidDidError()
-            network_num = number + 7
-        except ValueError:
-            raise InvalidDidError(f"Network not recognised {network}")
+    if network is not None and network not in NETWORKS:       
+        raise InvalidDidError(f"Network not recognised {network}")
     else:
         network_num = NETWORKS.index(network)
 
