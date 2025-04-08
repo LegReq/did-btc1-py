@@ -1,16 +1,24 @@
 from buidl.ecc import S256Point
 from buidl.tx import Tx
-import re
+from buidl.helper import sha256
+import base58
+import jcs
+import json
+import copy
 from bitcoinrpc import BitcoinRPC
-
+from ipfs_cid import cid_sha256_wrap_digest
+import urllib
+import jsonpatch
 from pydid.doc import DIDDocument
 from pydid.doc.builder import VerificationMethodBuilder
 from pydid.verification_method import Multikey
-
+from di_bip340.cryptosuite import Bip340JcsCryptoSuite
+from di_bip340.data_integrity_proof import DataIntegrityProof
+from di_bip340.multikey import SchnorrSecp256k1Multikey
 from .bech32 import decode_bech32_identifier
 from .verificationMethod import get_verification_method
 from .did import decode_identifier, KEY, EXTERNAL, InvalidDidError
-from .diddoc.builder import Btc1DIDDocumentBuilder
+from .diddoc.builder import Btc1DIDDocumentBuilder, IntermediateBtc1DIDDocumentBuilder
 from .helper import canonicalize_and_hash
 from .service import BeaconTypes, CID_AGGREGATE_BEACON, SINGLETON_BEACON, SMT_AGGREGATE_BEACON
 
@@ -29,13 +37,11 @@ P2TR = "p2tr"
 class Btc1Resolver():
 
     def __init__(self, rpc_endpoint, rpcuser, rpcpassword):
-        self.bitcoinrpc = BitcoinRPC.from_config("http://localhost:18443", ("polaruser", "polarpass"))
+        self.bitcoinrpc = BitcoinRPC.from_config(rpc_endpoint, (rpcuser, rpcpassword))
 
 
 
     async def resolve(self, identifier, resolution_options=None):
-
-        
 
         id_type, version, network, genesis_bytes = decode_identifier(identifier)
 
@@ -51,14 +57,14 @@ class Btc1Resolver():
                                                         version, 
                                                         network)
         elif id_type == EXTERNAL:
-            pass
+            initial_did_document = await self.resolve_external(identifier, genesis_bytes, version, network, resolution_options)
         else:
             raise Exception("Invalid HRP")
         
         # TODO: Process Beacon Signals
 
-        did_document = initial_did_document
-        return did_document.serialize()
+        target_document = self.resolve_target_document(initial_did_document, resolution_options, network)
+        return target_document
 
 
 
@@ -75,6 +81,35 @@ class Btc1Resolver():
 
         return did_document
     
+    async def resolve_external(self, btc1_identifier, genesis_bytes, version, network, resolution_options):
+        sidecar_data = resolution_options.get("sidecarData")
+        initial_document = None
+        if sidecar_data:
+            doc_json = sidecar_data.get("initialDocument")
+            initial_document = DIDDocument.from_json(doc_json)
+        
+        if initial_document:
+            initial_document = self.sidecar_initial_document_validation(btc1_identifier, genesis_bytes, version, network, initial_document)
+        else:
+            initial_document = self.cas_retrieval(btc1_identifier, genesis_bytes, version, network)
+
+        # TODO: validate initial document
+
+        return initial_document
+
+    def sidecar_initial_document_validation(self, btc1_identifier, genesis_bytes, version, network, initial_document):
+        builder = IntermediateBtc1DIDDocumentBuilder.from_doc(initial_document)
+        intermediate_doc = builder.build()
+        hash_bytes = sha256(jcs.canonicalize(intermediate_doc))
+        if hash_bytes != genesis_bytes:
+            raise InvalidDidError("Initial document provided, does not match identifier genesis bytes")
+
+        return initial_document
+    
+    async def cas_retrieval(self, btc1_identifier, genesis_bytes, version, network):
+        cid = cid_sha256_wrap_digest(genesis_bytes)
+        # TODO: Attempt to fetch content for CID from IPFS
+        raise NotImplemented
 
     async def resolve_target_document(self, initial_document: DIDDocument, resolution_options, network):
         request_version_id = resolution_options.get("versionId")
@@ -156,6 +191,41 @@ class Btc1Resolver():
 
         updates = self.process_beacon_signals(signals, signals_metadata)
 
+        updates.sort(key=lambda update: update["targetVersionId"])
+
+        for update in updates:
+            target_version_id = update["targetVersionId"]
+            if target_version_id <= current_version_id:
+                self.confirm_duplicate_update(update, update_hash_history)
+            if target_version_id == current_version_id + 1:
+                if base58.b58decode(update["sourceHash"]) != contemporary_hash:
+                    raise Exception("Late Publishing")
+                contemporary_document = self.apply_did_update(contemporary_document, update)
+                current_version_id += 1
+                if current_version_id == target_version_id:
+                    print("Found document for target version", contemporary_document)
+                updateHash = sha256(jcs.canonicalize(update))
+                update_hash_history.append(updateHash)
+                contemporary_hash = sha256(jcs.canonicalize(contemporary_document))
+            if target_version_id > current_version_id + 1:
+                raise Exception("Late publishing") 
+            
+            if contemporary_blockheight == target_blockheight:
+                return contemporary_document
+            
+            contemporary_blockheight += 1
+
+            target_document = self.traverse_blockchain_history(contemporary_document,
+                                                               contemporary_blockheight,
+                                                               current_version_id,
+                                                               target_version_id,
+                                                               target_blockheight,
+                                                               update_hash_history,
+                                                               signals_metadata,
+                                                               network)
+
+            return target_document
+
     async def find_next_signals(self, beacons, contemporary_blockheight, target_blockheight, network):
         signals = []
 
@@ -207,7 +277,7 @@ class Btc1Resolver():
         return next_signals
     
 
-    def process_beacon_signals(signals, signals_metadata):
+    def process_beacon_signals(self, signals, signals_metadata):
         updates = []
 
         for signal in signals:
@@ -217,9 +287,116 @@ class Btc1Resolver():
             signal_sidecar_data = signals_metadata.get(signal_id)
             did_update_payload = None
             if type == SINGLETON_BEACON:
-                did_update_payload = process_singleton_beacon_signal()
-    
+                did_update_payload = self.process_singleton_beacon_signal(signal_tx, signal_sidecar_data)
 
+            if did_update_payload:
+                updates.append(did_update_payload)
+        
+        return updates
+
+    def process_singleton_beacon_signal(self, tx: Tx, signal_sidecar_data):
+        tx_out = tx.tx_outs[0]
+        did_update_payload = None
+
+        if (tx_out.script_pubkey.commands[0] != 106 and len(tx_out.script_pubkey.commands[1]) != 32):
+            print("Not a beacon signal")
+            return did_update_payload
+        
+        hash_bytes = tx_out.script_pubkey.commands[1]
+
+        if signal_sidecar_data:
+            did_update_payload = signal_sidecar_data.get("updatePayload")
+
+            if not did_update_payload:
+                raise Exception("InvalidSidecarData")
+            
+            update_hash_bytes = sha256(jcs.canonicalize(did_update_payload))
+
+            if update_hash_bytes != hash_bytes:
+                raise Exception("InvalidSidecarData")
+            
+            return did_update_payload
+        else:
+            payload_cid = cid_sha256_wrap_digest(hash_bytes)
+            # TODO: Fetch payload from IPFS
+            raise NotImplemented
         
 
+    def confirm_duplicate_update(self, update, update_hash_history):
 
+        update_hash = sha256(jcs.canonicalize(update))
+        # Note: version starts at 1, index starts at 0
+        update_hash_index = update["targetVersionId"] - 2
+        historical_update_hash = update_hash_history[update_hash_index]
+        if (historical_update_hash != update_hash):
+            raise Exception("Late Publishing Error")
+        return    
+
+        
+    def apply_did_update(contemporary_document, update):
+        # Retrieve the verification method used to secure the proof from the contemporary DID document
+        capability_id = update["proof"]["capability"]
+
+        root_capability = dereference_root_capability(capability_id)
+        
+        proof_vm_id = update["proof"]["verificationMethod"]
+        btc1_identifier = contemporary_document["id"]
+        verification_method = None
+        for vm in contemporary_document["verificationMethod"]:
+            vm_id = vm["id"]
+            if vm_id[0] == "#":
+                vm_id = f"{btc1_identifier}{vm_id}"
+            if vm_id == proof_vm_id:
+                print("Verification Method found", vm)
+                verification_method = vm
+        if verification_method == None:
+            raise Exception("Invalid Proof on Update Payload")
+        multikey = SchnorrSecp256k1Multikey.from_verification_method(verification_method)
+
+        # Instantiate a schnorr-secp256k1-2025 cryptosuite instance.
+        cryptosuite = Bip340JcsCryptoSuite(multikey)
+        di_proof = DataIntegrityProof(cryptosuite=cryptosuite)
+
+        mediaType = "application/json"
+
+        expected_proof_purpose = "capabilityInvocation"
+
+        update_bytes = json.dumps(update)
+
+        verificationResult = di_proof.verify_proof(mediaType, update_bytes, expected_proof_purpose, None, None)
+
+        if not verificationResult["verified"]:
+            raise Exception("invalidUpdateProof")
+
+        target_did_document = copy.deepcopy(contemporary_document)
+
+        update_patch = update["patch"]
+
+        patch = jsonpatch.JsonPatch(update_patch)
+        
+        target_did_document = patch.apply(target_did_document)
+
+        target_hash = sha256(jcs.canonicalize(target_did_document))
+
+        update_target_hash = base58.b58decode(update["targetHash"])
+        if (target_hash == update_target_hash):
+            raise Exception("LatePublishingError")
+
+        return target_did_document
+
+    def dereference_root_capability(self, capability_id):
+    
+        components = capability_id.split(":")
+        assert(len(components) == 4)
+        assert(components[0] == "urn")
+        assert(components[1] == "zcap")
+        assert(components[2] == "root")
+        uri_encoded_id = components[3]
+        btc1Identifier = urllib.parse.unquote(uri_encoded_id)
+        root_capability = {
+            "@context": "https://w3id.org/zcap/v1",
+            "id": capability_id,
+            "controller": btc1Identifier,
+            "invocationTarget": btc1Identifier
+        }
+        return root_capability

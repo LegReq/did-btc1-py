@@ -2,9 +2,10 @@ from pydid.doc import DIDDocument
 from pydid.did import DID
 from ..did import PLACEHOLDER_DID
 
-class Btc1Document(DIDDocument):
+# class Btc1Document(DIDDocument):
 
-    def from_secp256k1_key():
+#     def from_secp256k1_key():
+
         
 
 

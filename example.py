@@ -10,7 +10,7 @@ import jcs
 from buidl.helper import big_endian_to_int, sha256
 
 from libbtc1.did import encode_identifier, decode_identifier, PLACEHOLDER_DID
-from libbtc1.resolver import resolve, resolve_deterministic
+from libbtc1.resolver import Btc1Resolver
 from libbtc1.service import SingletonBeaconService
 from libbtc1.diddoc.builder import Btc1DIDDocumentBuilder, IntermediateBtc1DIDDocumentBuilder
 from libbtc1.multikey import get_public_key_multibase
@@ -46,27 +46,27 @@ def main():
     print(did)
     print(json.dumps(document.serialize(), indent=2))
 
-    # pk_multibase = get_public_key_multibase(pub_key.sec())
+    pk_multibase = get_public_key_multibase(pub_key.sec())
 
-    # vm = builder.verification_method.add(Multikey, controller=PLACEHOLDER_DID, public_key_multibase = pk_multibase)
+    vm = builder.verification_method.add(Multikey, controller=PLACEHOLDER_DID, public_key_multibase = pk_multibase)
 
-    # builder.authentication.reference(vm.id)
+    builder.authentication.reference(vm.id)
 
-    # builder.authentication.add(Multikey, public_key_multibase=pk_multibase)
-
-
-    # address = pub_key.p2tr_address(network="mainnet")
-
-    # builder.service.add_singleton_beacon(beacon_address=address)
-
-    # intermediate_doc = builder.build()
-
-    # print(json.dumps(intermediate_doc.serialize(), indent=2))
+    builder.authentication.add(Multikey, public_key_multibase=pk_multibase)
 
 
-    # btc1, doc = create_external(intermediate_doc)
+    address = pub_key.p2tr_address(network="mainnet")
 
-    # print(json.dumps(doc.serialize(), indent=2))
+    builder.service.add_singleton_beacon(beacon_address=address)
+
+    intermediate_doc = builder.build()
+
+    print(json.dumps(intermediate_doc.serialize(), indent=2))
+
+
+    btc1, doc = create_external(intermediate_doc)
+
+    print("External \n ",json.dumps(doc.serialize(), indent=2))
 
     # genesis_bytes = pub_key.sec()
 

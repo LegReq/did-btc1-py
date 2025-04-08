@@ -1,104 +1,164 @@
 
 from .did import encode_identifier, KEY, EXTERNAL, NETWORKS, VERSIONS
-from .resolver import resolve
 import jcs
 from buidl.helper import sha256
 from pydid.doc import DIDDocument
+from bitcoinrpc import BitcoinRPC
 from .did import PLACEHOLDER_DID
 from .diddoc.doc import IntermediateBtc1DIDDocument
 from .diddoc.builder import Btc1DIDDocumentBuilder
+from .diddoc.updater import Btc1DIDDocumentUpdater
+from buidl.tx import Tx, TxIn, TxOut, SIGHASH_DEFAULT
+from buidl.script import ScriptPubKey, address_to_script_pubkey
+from buidl.ecc import PrivateKey
 
-def create_deterministic(public_key, network="bitcoin", version=1):
-    if network not in NETWORKS:
-        raise Exception(f"Invalid Network : {network}")
-    
-    if version not in VERSIONS:
-        raise Exception(f"Invalid Version : {version}")
-    
-    builder = Btc1DIDDocumentBuilder.from_secp256k1_key(public_key, network, version)
+class DIDManager():
 
-    did_document = builder.build()
+    def __init__(self, rpc_endpoint, rpcuser, rpcpassword):
+        self.bitcoinrpc = BitcoinRPC.from_config(rpc_endpoint, (rpcuser, rpcpassword))
+        self.pending_updates = []
 
+    def create_deterministic(self, public_key, network="bitcoin", version=1):
+        if network not in NETWORKS:
+            raise Exception(f"Invalid Network : {network}")
+        
+        if version not in VERSIONS:
+            raise Exception(f"Invalid Version : {version}")
+        
+        builder = Btc1DIDDocumentBuilder.from_secp256k1_key(public_key, network, version)
 
-    return did_document.id, did_document
+        did_document = builder.build()
 
-def create_external(intermediate_document: IntermediateBtc1DIDDocument, network = "bitcoin", version = 1):
-    if network not in NETWORKS:
-        raise Exception(f"Invalid Network : {network}")
-    
-    if version not in VERSIONS:
-        raise Exception(f"Invalid Version : {version}")
-    
-    if intermediate_document.id != PLACEHOLDER_DID:
-        raise Exception(f"Intermediate Document must use placeholder id : {intermediate_document.id}")
-    
-
-    genesis_bytes = sha256(jcs.canonicalize(intermediate_document.serialize()))
-
-    identifier = encode_identifier(EXTERNAL, version, network, genesis_bytes)
-
-    did_document = intermediate_document.to_did_document(identifier)
-
-    # did_document.id = identifier
-
-    # for index, controller in enumerate(did_document.controller):
-    #     if controller == PLACEHOLDER_DID:
-    #         did_document.controller[index] = identifier
+        self.did = did_document.id
+        self.network = network
+        self.document = did_document
+        self.version = 1
+        self.signals_metadata = {}
 
 
-    # for index, vm in enumerate(did_document.verification_method):
-    #     print(vm)
-    #     if PLACEHOLDER_DID in vm.id:
-    #         vm.id = vm.id.replace(PLACEHOLDER_DID, identifier)
-    #     if vm.controller == PLACEHOLDER_DID:
-    #         vm.controller = vm.controller.replace(PLACEHOLDER_DID, identifier)
+        return did_document.id, did_document
 
-    # for index, vm in enumerate(did_document.authentication):
-    #     if isinstance(vm, str) and PLACEHOLDER_DID in vm:
-    #         did_document.authentication[index] = vm.replace(PLACEHOLDER_DID, identifier)
+    def create_external(self, intermediate_document: IntermediateBtc1DIDDocument, network = "bitcoin", version = 1):
+        if network not in NETWORKS:
+            raise Exception(f"Invalid Network : {network}")
+        
+        if version not in VERSIONS:
+            raise Exception(f"Invalid Version : {version}")
+        
+        if intermediate_document.id != PLACEHOLDER_DID:
+            raise Exception(f"Intermediate Document must use placeholder id : {intermediate_document.id}")
+        
 
-    #     else:
-    #         if PLACEHOLDER_DID in vm.id:
-    #             vm.id = vm.id.replace(PLACEHOLDER_DID, identifier)
-    #         if vm.controller == PLACEHOLDER_DID:
-    #             vm.controller = identifier
+        genesis_bytes = sha256(jcs.canonicalize(intermediate_document.serialize()))
 
-    # for index, vm in enumerate(did_document.assertion_method):
-    #     if isinstance(vm, str) and PLACEHOLDER_DID in vm:
-    #         did_document.authentication[index] = vm.replace(PLACEHOLDER_DID, identifier)
+        identifier = encode_identifier(EXTERNAL, version, network, genesis_bytes)
 
-    #     else:
-    #         if PLACEHOLDER_DID in vm.id:
-    #             vm.id = vm.id.replace(PLACEHOLDER_DID, identifier)
-    #         if vm.controller == PLACEHOLDER_DID:
-    #             vm.controller = identifier
+        did_document = intermediate_document.to_did_document(identifier)
 
-    # for index, vm in enumerate(did_document.capability_delegation):
-    #     if isinstance(vm, str) and PLACEHOLDER_DID in vm:
-    #         did_document.authentication[index] = vm.replace(PLACEHOLDER_DID, identifier)
+        self.did = did_document.id
+        self.version = 1
+        self.network = network
+        self.initial_document = did_document
+        self.document = did_document
+        self.signals_metadata = {}
 
-    #     else:
-    #         if PLACEHOLDER_DID in vm.id:
-    #             vm.id = vm.id.replace(PLACEHOLDER_DID, identifier)
-    #         if vm.controller == PLACEHOLDER_DID:
-    #             vm.controller = identifier
 
-    # for index, vm in enumerate(did_document.key_agreement):
-    #     if isinstance(vm, str) and PLACEHOLDER_DID in vm:
-    #         did_document.authentication[index] = vm.replace(PLACEHOLDER_DID, identifier)
-
-    #     else:
-    #         if PLACEHOLDER_DID in vm.id:
-    #             vm.id = vm.id.replace(PLACEHOLDER_DID, identifier)
-    #         if vm.controller == PLACEHOLDER_DID:
-    #             vm.controller = identifier
-
-    #             vm.controller = identifier
-    
-    
+        return identifier, did_document
     
 
-    return identifier, did_document
+    def updater(self):
+        builder = Btc1DIDDocumentBuilder.from_doc(self.document)
+        updater = Btc1DIDDocumentUpdater(builder, self.version)
+        return updater
+    
+    async def announce_update(self, beacon_id, beacon_sk, secured_update):
+        beacon_service = None
+        for service in self.document.service:
+            if service.id == beacon_id:
+                beacon_service = service
+                break
+
+        if not beacon_service:
+            raise Exception("InvalidBeacon")
+        
+        beacon_address = beacon_service.serialize()["serviceEndpoint"]
+
+        print("Beaocn Address", beacon_address)
+
+        beacon_address = beacon_address.replace("bitcoin:", "")
+
+        ## TODO: Need to know the availabel UTXOs that can be spend for a particular beacon
+        signing_res = await self.bitcoinrpc.acall("send", {"outputs": { beacon_address: 0.2}})
+
+        funding_txid = signing_res["txid"]
+
+        funding_tx_hex = await self.bitcoinrpc.acall("getrawtransaction", {"txid": funding_txid})
+        funding_tx = Tx.parse_hex(funding_tx_hex)
+
+        prev_tx = bytes.fromhex(funding_txid)  # Identifying funding tx
+        prev_index = 1 # Identify funding output index
+
+        tx_in = TxIn(prev_tx=prev_tx, prev_index=prev_index)
+        tx_in._script_pubkey = funding_tx.tx_outs[prev_index].script_pubkey
+        tx_in._value = funding_tx.tx_outs[prev_index].amount
+            
+        invocation_hash = sha256(jcs.canonicalize(secured_update))
+
+        script_pubkey = ScriptPubKey([0x6a, invocation_hash])
+
+        beacon_signal_txout = TxOut(0, script_pubkey)
+
+        tx_fee = 350
+
+        refund_amount = tx_in.value() - tx_fee
+
+        
+        refund_script_pubkey = beacon_sk.point.p2wpkh_script()
+        refund_out = TxOut(amount=refund_amount, script_pubkey=refund_script_pubkey)
+        tx_ins = [tx_in]
+
+        tx_outs = [beacon_signal_txout, refund_out]
+        pending_beacon_signal = Tx(version=1, tx_ins=tx_ins, tx_outs=tx_outs, network=self.network,segwit=True)
 
 
+        signing_res = pending_beacon_signal.sign_input(0, beacon_sk)
+
+        if not signing_res:
+            raise Exception("Invalid Beacon Key, unable to sign signal")
+        
+        signed_hex = pending_beacon_signal.serialize().hex()
+        signal_id = await self.bitcoinrpc.acall("sendrawtransaction", {"hexstring": signed_hex})
+
+        self.signals_metadata[signal_id] = {
+            "updatePayload": secured_update
+        }
+
+        return True
+
+    async def finalize_update_payload(self, updater, vm_id, signing_key, beacon_id, beacon_sk):
+        updater.construct_update_payload()
+        secured_update = updater.finalize_update_payload(vm_id, signing_key)
+        self.document = updater.builder.build()
+        self.version += 1
+        result = await self.announce_update(beacon_id, beacon_sk, secured_update)
+        
+        if not result:
+            raise Exception("Error announcing")
+        return self.document
+
+
+
+
+    def get_sidecar_data(self):
+        sidecarData = {
+            "did": self.did,
+        }
+
+        if self.initial_document:
+            sidecarData["initialDocument"] = self.initial_document
+
+        if self.signals_metadata:
+            sidecarData["signalsMetadata"] = self.signals_metadata
+
+        return sidecarData
     

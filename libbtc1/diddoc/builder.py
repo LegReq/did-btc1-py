@@ -1,5 +1,7 @@
 from pydid.doc.builder import ServiceBuilder, DIDDocumentBuilder
 from pydid.did import DID
+from pydid.doc.builder import DIDDocumentBuilder, RelationshipBuilder, VerificationMethodBuilder
+from pydid.doc import DIDDocument
 from pydid.verification_method import Multikey
 
 from buidl.ecc import S256Point
@@ -23,7 +25,7 @@ class Btc1ServiceBuilder(ServiceBuilder):
         )
 
         self.services.append(service)
-        return service
+        return service        
     
 
 
@@ -80,47 +82,15 @@ class Btc1DIDDocumentBuilder(DIDDocumentBuilder):
             network = "signet"
 
         p2pkh_address = initial_key.p2pkh_script().address(network)
-        builder.service.add_singleton_beacon("#initialP2PKH", p2pkh_address)
+        builder.service.add_singleton_beacon(p2pkh_address, "#initialP2PKH")
 
         p2wpkh_address = initial_key.p2wpkh_address(network=network)
-        builder.service.add_singleton_beacon("#initialP2WPKH", p2wpkh_address)
+        builder.service.add_singleton_beacon(p2wpkh_address, "#initialP2WPKH")
 
         p2tr_address = initial_key.p2tr_address(network=network)
-        builder.service.add_singleton_beacon("#initialP2TR", p2tr_address)
+        builder.service.add_singleton_beacon(p2tr_address, "#initialP2TR")
 
         return builder
-
-
-    # @classmethod
-    # def from_doc(cls, doc: DIDDocument) -> "DIDDocumentBuilder":
-    #     """Create a Builder from an existing DIDDocument."""
-    #     builder = cls(
-    #         id=doc.id,
-    #         context=doc.context,
-    #         also_known_as=doc.also_known_as,
-    #         controller=doc.controller,
-    #     )
-    #     builder.verification_method = VerificationMethodBuilder(
-    #         doc.id, methods=doc.verification_method
-    #     )
-    #     builder.authentication = RelationshipBuilder(
-    #         doc.id, "auth", methods=doc.authentication
-    #     )
-    #     builder.assertion_method = RelationshipBuilder(
-    #         doc.id, "assert", methods=doc.assertion_method
-    #     )
-    #     builder.key_agreement = RelationshipBuilder(
-    #         doc.id, "key-agreement", methods=doc.key_agreement
-    #     )
-    #     builder.capability_invocation = RelationshipBuilder(
-    #         doc.id, "capability-invocation", methods=doc.capability_invocation
-    #     )
-    #     builder.capability_delegation = RelationshipBuilder(
-    #         doc.id, "capability-delegation", methods=doc.capability_delegation
-    #     )
-    #     builder.service = Btc1ServiceBuilder(doc.id, services=doc.service)
-    #     return builder
-
 
 class IntermediateBtc1DIDDocumentBuilder(Btc1DIDDocumentBuilder):
     def __init__(
@@ -146,5 +116,33 @@ class IntermediateBtc1DIDDocumentBuilder(Btc1DIDDocumentBuilder):
             service=self.service.services or None,
             **self.extra,
         )
-
+    
+    @classmethod
+    def from_doc(cls, doc: DIDDocument) -> "IntermediateBtc1DIDDocumentBuilder":
+        builder = cls(
+            id=PLACEHOLDER_DID,
+            context=doc.context,
+            also_known_as=doc.also_known_as,
+            controller=doc.controller,
+        )
+        builder.verification_method = VerificationMethodBuilder(
+            PLACEHOLDER_DID, methods=doc.verification_method
+        )
+        builder.authentication = RelationshipBuilder(
+            PLACEHOLDER_DID, "auth", methods=doc.authentication
+        )
+        builder.assertion_method = RelationshipBuilder(
+            PLACEHOLDER_DID, "assert", methods=doc.assertion_method
+        )
+        builder.key_agreement = RelationshipBuilder(
+            PLACEHOLDER_DID, "key-agreement", methods=doc.key_agreement
+        )
+        builder.capability_invocation = RelationshipBuilder(
+            PLACEHOLDER_DID, "capability-invocation", methods=doc.capability_invocation
+        )
+        builder.capability_delegation = RelationshipBuilder(
+            PLACEHOLDER_DID, "capability-delegation", methods=doc.capability_delegation
+        )
+        builder.service = Btc1ServiceBuilder(PLACEHOLDER_DID, services=doc.service)
+        return builder
     
