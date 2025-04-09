@@ -14,14 +14,21 @@ from buidl.ecc import PrivateKey
 
 class DIDManager():
 
-    def __init__(self, rpc_endpoint, rpcuser, rpcpassword):
+    def __init__(self, network, rpc_endpoint, rpcuser, rpcpassword):
         self.bitcoinrpc = BitcoinRPC.from_config(rpc_endpoint, (rpcuser, rpcpassword))
         self.pending_updates = []
+        self.initial_document = None
+        self.did = None
+        self.network = network
+
 
     def create_deterministic(self, public_key, network="bitcoin", version=1):
         if network not in NETWORKS:
             raise Exception(f"Invalid Network : {network}")
         
+        if network != self.network:
+            raise Exception("Manager for different network")
+
         if version not in VERSIONS:
             raise Exception(f"Invalid Version : {version}")
         
@@ -30,7 +37,6 @@ class DIDManager():
         did_document = builder.build()
 
         self.did = did_document.id
-        self.network = network
         self.document = did_document
         self.version = 1
         self.signals_metadata = {}
@@ -42,13 +48,15 @@ class DIDManager():
         if network not in NETWORKS:
             raise Exception(f"Invalid Network : {network}")
         
+        if network != self.network:
+            raise Exception("Manager for different network")
+
         if version not in VERSIONS:
             raise Exception(f"Invalid Version : {version}")
         
         if intermediate_document.id != PLACEHOLDER_DID:
             raise Exception(f"Intermediate Document must use placeholder id : {intermediate_document.id}")
         
-
         genesis_bytes = sha256(jcs.canonicalize(intermediate_document.serialize()))
 
         identifier = encode_identifier(EXTERNAL, version, network, genesis_bytes)
@@ -57,7 +65,6 @@ class DIDManager():
 
         self.did = did_document.id
         self.version = 1
-        self.network = network
         self.initial_document = did_document
         self.document = did_document
         self.signals_metadata = {}
@@ -94,9 +101,13 @@ class DIDManager():
 
         funding_tx_hex = await self.bitcoinrpc.acall("getrawtransaction", {"txid": funding_txid})
         funding_tx = Tx.parse_hex(funding_tx_hex)
-
+        print("Funding Tx", funding_tx)
+        for index, tx_out in enumerate(funding_tx.tx_outs):
+            if beacon_address == tx_out.script_pubkey.address(network=self.network):
+                prev_index = index
+                break
+            # print("TXOUT", )
         prev_tx = bytes.fromhex(funding_txid)  # Identifying funding tx
-        prev_index = 1 # Identify funding output index
 
         tx_in = TxIn(prev_tx=prev_tx, prev_index=prev_index)
         tx_in._script_pubkey = funding_tx.tx_outs[prev_index].script_pubkey
@@ -120,9 +131,8 @@ class DIDManager():
         tx_outs = [beacon_signal_txout, refund_out]
         pending_beacon_signal = Tx(version=1, tx_ins=tx_ins, tx_outs=tx_outs, network=self.network,segwit=True)
 
-
         signing_res = pending_beacon_signal.sign_input(0, beacon_sk)
-
+        print(signing_res)
         if not signing_res:
             raise Exception("Invalid Beacon Key, unable to sign signal")
         

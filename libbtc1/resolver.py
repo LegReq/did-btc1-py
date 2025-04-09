@@ -52,7 +52,7 @@ class Btc1Resolver():
             raise Exception(f"RPC connected to incorrect chain {chain}")
 
         if id_type == KEY:
-            initial_did_document = await self.resolve_deterministic(identifier, 
+            initial_did_document = self.resolve_deterministic(identifier, 
                                                         genesis_bytes, 
                                                         version, 
                                                         network)
@@ -63,7 +63,7 @@ class Btc1Resolver():
         
         # TODO: Process Beacon Signals
 
-        target_document = self.resolve_target_document(initial_did_document, resolution_options, network)
+        target_document = await self.resolve_target_document(initial_did_document, resolution_options, network)
         return target_document
 
 
@@ -138,7 +138,7 @@ class Btc1Resolver():
 
         contemporary_document = initial_document.model_copy()
 
-        target_document = self.traverse_blockchain_history(contemporary_document, 
+        target_document = await self.traverse_blockchain_history(contemporary_document, 
                                                            contemporary_blockheight, 
                                                            current_version_id, 
                                                            request_version_id, 
@@ -186,7 +186,7 @@ class Btc1Resolver():
         next_signals = await self.find_next_signals(beacons, contemporary_blockheight, target_blockheight, network)
 
         contemporary_blockheight = next_signals["blockheight"]
-
+        print(contemporary_blockheight, target_blockheight)
         signals = next_signals["signals"]
 
         updates = self.process_beacon_signals(signals, signals_metadata)
@@ -209,55 +209,58 @@ class Btc1Resolver():
                 contemporary_hash = sha256(jcs.canonicalize(contemporary_document))
             if target_version_id > current_version_id + 1:
                 raise Exception("Late publishing") 
-            
-            if contemporary_blockheight == target_blockheight:
-                return contemporary_document
-            
-            contemporary_blockheight += 1
+        
+        print("Tracking", contemporary_blockheight, target_blockheight)
+        if contemporary_blockheight == target_blockheight:
+            print("Got to target", contemporary_blockheight)
+            return contemporary_document
+        
+        contemporary_blockheight += 1
 
-            target_document = self.traverse_blockchain_history(contemporary_document,
-                                                               contemporary_blockheight,
-                                                               current_version_id,
-                                                               target_version_id,
-                                                               target_blockheight,
-                                                               update_hash_history,
-                                                               signals_metadata,
-                                                               network)
+        target_document = await self.traverse_blockchain_history(contemporary_document,
+                                                            contemporary_blockheight,
+                                                            current_version_id,
+                                                            target_version_id,
+                                                            target_blockheight,
+                                                            update_hash_history,
+                                                            signals_metadata,
+                                                            network)
 
-            return target_document
+        return target_document
 
     async def find_next_signals(self, beacons, contemporary_blockheight, target_blockheight, network):
         signals = []
 
-        block = await self.bitcoinrpc.getblockhash(contemporary_blockheight)
-
+        block_hash = await self.bitcoinrpc.getblockhash(contemporary_blockheight)
+        block = await self.bitcoinrpc.getblock(block_hash)
         for txid in block["tx"]:
             if txid not in COINBASE_TXIDS:
-                tx_hex = await self.bitcoinrpc.getrawtransaction(txid)
+                tx_hex = await self.bitcoinrpc.getrawtransaction(txid, verbose=False)
                 tx = Tx.parse_hex(tx_hex)
 
                 for tx_in in tx.tx_ins:
                     prev_txid = tx_in.prev_tx.hex()
-                    prev_tx_hex = await self.bitcoinrpc.getrawtransaction(prev_txid)
-                    prev_tx = Tx.parse_hex(prev_tx_hex)
+                    if prev_txid not in COINBASE_TXIDS:
+                        prev_tx_hex = await self.bitcoinrpc.getrawtransaction(prev_txid, verbose=False)
+                        prev_tx = Tx.parse_hex(prev_tx_hex)
 
-                    spent_tx_output = prev_tx.tx_outs[tx_in.prev_index]
-                    spent_tx_output_address = spent_tx_output.script_pubkey.address(network="regtest")
+                        spent_tx_output = prev_tx.tx_outs[tx_in.prev_index]
+                        spent_tx_output_address = spent_tx_output.script_pubkey.address(network="regtest")
 
-                    beacon_signal = None
-                    for beacon in beacons:
-                        if beacon["address"] == spent_tx_output_address:
-                            beacon_signal = {
-                                "beaconId": beacon["id"],
-                                "beaconType": beacon["type"],
-                                "tx": tx
-                            }
-                            signals.append(beacon_signal)
-                            print("Found Beacon Signal", tx)
+                        beacon_signal = None
+                        for beacon in beacons:
+                            if beacon["address"] == spent_tx_output_address:
+                                beacon_signal = {
+                                    "beaconId": beacon["id"],
+                                    "beaconType": beacon["type"],
+                                    "tx": tx
+                                }
+                                signals.append(beacon_signal)
+                                print("Found Beacon Signal", tx)
+                                break
+                        
+                        if beacon_signal:
                             break
-                    
-                    if beacon_signal:
-                        break
 
         if contemporary_blockheight == target_blockheight:
             next_signals = {
@@ -267,7 +270,7 @@ class Btc1Resolver():
             return next_signals
         
         if len(signals) == 0:
-            next_signals = self.find_next_signals(beacons, contemporary_blockheight+1, target_blockheight, network)
+            next_signals = await self.find_next_signals(beacons, contemporary_blockheight+1, target_blockheight, network)
         else:
             next_signals = {
                 "blockheight": contemporary_blockheight,

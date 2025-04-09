@@ -15,9 +15,10 @@ async def create_and_update_did():
 
     pub_key = private_key.point
     rpc_endpoint = "http://localhost:18443"
-    did_manager = DIDManager(rpc_endpoint=rpc_endpoint, rpcuser="polaruser", rpcpassword="polarpass")
-
     network = "regtest"
+
+    did_manager = DIDManager(network=network, rpc_endpoint=rpc_endpoint, rpcuser="polaruser", rpcpassword="polarpass")
+
     did, did_document = did_manager.create_deterministic(pub_key, network)
 
     print("Initial Document\n")
@@ -42,12 +43,16 @@ async def create_and_update_did():
 
 
     beacon_id = did_document.service[1].id
-
+    print("Beacon ID : ", beacon_id)
     updated_doc = await did_manager.finalize_update_payload(updater, vm_id, private_key, beacon_id, private_key)
 
 
     print("\nv2 DID Doc \n")
     print(json.dumps(updated_doc.serialize(), indent=2))
+
+    print(f"\nDID : {did_manager.did}")
+    print("\nSidecar Data")
+    print(json.dumps(did_manager.get_sidecar_data(), indent=2))
 
     # TODO: Need better integration with updater and manager
     # Manager should know latest did document.
