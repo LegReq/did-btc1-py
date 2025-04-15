@@ -39,7 +39,7 @@ async def create_and_update_did():
     updater.add_service(service)
 
     vm_id = did_document.verification_method[0].id
-
+    print("VMID", vm_id)
 
 
     beacon_id = did_document.service[1].id
@@ -56,7 +56,7 @@ async def create_and_update_did():
 
     # TODO: Need better integration with updater and manager
     # Manager should know latest did document.
-    # did_manager.announce_update(beacon_id, private_key)
+    # did_manager.announce_update(beacon_id, privat e_key)
 
 
 asyncio.run(create_and_update_did())

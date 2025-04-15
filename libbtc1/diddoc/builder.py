@@ -58,7 +58,7 @@ class Btc1DIDDocumentBuilder(DIDDocumentBuilder):
             controller=did_btc1,
         )
 
-        vm_id = "#initialKey"
+        vm_id = "initialKey"
 
         public_key_multibase = get_public_key_multibase(key_bytes)
 
