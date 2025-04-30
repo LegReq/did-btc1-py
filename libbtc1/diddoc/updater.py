@@ -48,6 +48,7 @@ class Btc1DIDDocumentUpdater():
 
 
     def validate_update(self):
+        print("JSON Patch " + json.dumps(self.update_patch))
         json_patch = jsonpatch.JsonPatch(self.update_patch)
         # print("Before Patch \n")
         next_document = self.current_document.model_copy(deep=True).serialize()
@@ -67,8 +68,8 @@ class Btc1DIDDocumentUpdater():
 
     def construct_update_payload(self):
         self.validate_update()
-        source_hash = sha256(jcs.canonicalize(self.current_document.serialize()))
-        target_hash = sha256(jcs.canonicalize(self.builder.build().serialize()))
+        source_hash = self.current_document.canonicalize()
+        target_hash = self.builder.build().canonicalize()
         target_version_id = self.current_version + 1
         update_payload = {
             '@context': [
@@ -110,8 +111,18 @@ class Btc1DIDDocumentUpdater():
         print(json.dumps(self.update_payload, indent=2))
 
         secured_did_update_payload = di_proof.add_proof(did_update_invocation, options)
+        mediaType = "application/json"
 
+        expected_proof_purpose = "capabilityInvocation"
 
+        update_bytes = json.dumps(secured_did_update_payload)
+
+        verificationResult = di_proof.verify_proof(mediaType, update_bytes, expected_proof_purpose, None, None)
+
+        if not verificationResult:
+            raise Exception("invalidUpdateProof")
+        
+        self.current_document = self.builder.build().model_copy(deep=True)
 
         return secured_did_update_payload
     

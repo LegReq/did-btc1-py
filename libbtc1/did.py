@@ -3,7 +3,7 @@ import math
 
 from .bech32 import encode_bech32_identifier, decode_bech32_identifier
 from.verificationMethod import get_verification_method
-
+from pydid.did import DID
 from .error import InvalidDidError
 
 BITCOIN="bitcoin"
@@ -104,7 +104,7 @@ def encode_identifier(id_type, version, network, genesis_bytes):
 
     identifier += encoded_string
 
-    return identifier
+    return DID(identifier)
 
 
 

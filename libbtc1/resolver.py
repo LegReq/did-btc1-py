@@ -1,8 +1,9 @@
 from buidl.ecc import S256Point
 from buidl.tx import Tx
-from buidl.helper import sha256
+from buidl.helper import sha256, bytes_to_str
 import base58
 import jcs
+import os
 import json
 import copy
 from bitcoinrpc import BitcoinRPC
@@ -19,9 +20,9 @@ from .bech32 import decode_bech32_identifier
 from .verificationMethod import get_verification_method
 from .did import decode_identifier, KEY, EXTERNAL, InvalidDidError
 from .diddoc.builder import Btc1DIDDocumentBuilder, IntermediateBtc1DIDDocumentBuilder
+from .diddoc.doc import Btc1Document, IntermediateBtc1DIDDocument
 from .helper import canonicalize_and_hash
-from .service import BeaconTypes, CID_AGGREGATE_BEACON, SINGLETON_BEACON, SMT_AGGREGATE_BEACON
-
+from .service import BeaconTypeNames, SingletonBeaconService
 CONTEXT = ["https://www.w3.org/ns/did/v1", "https://did-btc1/TBD/context"]
 
 
@@ -35,17 +36,25 @@ P2TR = "p2tr"
 
 
 class Btc1Resolver():
-
-    def __init__(self, rpc_endpoint, rpcuser, rpcpassword):
+    
+    def __init__(self, rpc_endpoint, rpcuser, rpcpassword, logging=False, log_folder="TestVectors"):
         self.bitcoinrpc = BitcoinRPC.from_config(rpc_endpoint, (rpcuser, rpcpassword))
+        self.logging = logging
+        self.log_folder = f"{os.getcwd()}/{log_folder}"
 
 
 
     async def resolve(self, identifier, resolution_options=None):
+    
+        if self.logging == True:
+            did_path = identifier.split(":")[2]
+            self.log_folder = f"{self.log_folder}/{did_path}"
+            if not os.path.exists(self.log_folder):
+                os.makedirs(self.log_folder)
 
         id_type, version, network, genesis_bytes = decode_identifier(identifier)
 
-        
+        print("ID Components", id_type, version, network, genesis_bytes.hex())
         blockchain_info = await self.bitcoinrpc.getblockchaininfo()
         chain = blockchain_info["chain"]
         if chain != network:
@@ -58,11 +67,13 @@ class Btc1Resolver():
                                                         network)
         elif id_type == EXTERNAL:
             initial_did_document = await self.resolve_external(identifier, genesis_bytes, version, network, resolution_options)
+
         else:
             raise Exception("Invalid HRP")
         
         # TODO: Process Beacon Signals
-
+        print("Initial DID document")
+        print(json.dumps(initial_did_document.serialize(), indent=2))
         target_document = await self.resolve_target_document(initial_did_document, resolution_options, network)
         return target_document
 
@@ -86,7 +97,10 @@ class Btc1Resolver():
         initial_document = None
         if sidecar_data:
             doc_json = sidecar_data.get("initialDocument")
-            initial_document = DIDDocument.from_json(doc_json)
+            print("Sidecar Initial External Resolve")
+            print(json.dumps(doc_json, indent=2))
+            initial_document = Btc1Document.deserialize(doc_json)
+            
         
         if initial_document:
             initial_document = self.sidecar_initial_document_validation(btc1_identifier, genesis_bytes, version, network, initial_document)
@@ -98,9 +112,16 @@ class Btc1Resolver():
         return initial_document
 
     def sidecar_initial_document_validation(self, btc1_identifier, genesis_bytes, version, network, initial_document):
-        builder = IntermediateBtc1DIDDocumentBuilder.from_doc(initial_document)
-        intermediate_doc = builder.build()
-        hash_bytes = sha256(jcs.canonicalize(intermediate_doc))
+        print("Initial Doc ")
+        print(json.dumps(initial_document.serialize(), indent=2))    
+        intermediate_doc = IntermediateBtc1DIDDocument.from_did_document(initial_document)
+        
+        print("Intermediate Doc ")
+        print(json.dumps(intermediate_doc.serialize(), indent=2))
+        print("Initial Doc ")
+        print(json.dumps(initial_document.serialize(), indent=2))        
+        hash_bytes = intermediate_doc.canonicalize()
+        
         if hash_bytes != genesis_bytes:
             raise InvalidDidError("Initial document provided, does not match identifier genesis bytes")
 
@@ -149,6 +170,7 @@ class Btc1Resolver():
 
         return target_document
 
+    # TODO: Remove
     async def determine_target_blockheight(self, versionTime):
         if versionTime:
             raise NotImplemented
@@ -166,30 +188,51 @@ class Btc1Resolver():
     
 
     async def traverse_blockchain_history(self, 
-                                          contemporary_document: DIDDocument, 
+                                          contemporary_document: Btc1Document, 
                                           contemporary_blockheight, 
                                           current_version_id, 
-                                          target_version_id, 
+                                          request_version_id, 
                                           target_blockheight, 
                                           update_hash_history, 
                                           signals_metadata,
                                           network):
-        contemporary_hash = canonicalize_and_hash(contemporary_document.serialize())      
+        contemporary_hash = contemporary_document.model_copy(deep=True).canonicalize()    
         beacons = []
         for service in contemporary_document.service:
-            if service.type in BeaconTypes:
-                beacon = service.serialize()
-                beacon["address"] = service.service_endpoint.replace("bitcoin:", "")
-                
+            # print("SERVICETYPE", service.type, type(service))
+            if service.type in BeaconTypeNames:
                 beacons.append(service)
 
         next_signals = await self.find_next_signals(beacons, contemporary_blockheight, target_blockheight, network)
+
+
+                
+        
 
         contemporary_blockheight = next_signals["blockheight"]
         print(contemporary_blockheight, target_blockheight)
         signals = next_signals["signals"]
 
         updates = self.process_beacon_signals(signals, signals_metadata)
+        
+        if self.logging and len(updates) != 0:
+            block_folder = f"{self.log_folder}/block{contemporary_blockheight}"
+            if not os.path.exists(block_folder):
+                os.makedirs(block_folder)
+            # next_signals_path = f"{block_folder}/next_signals.json"
+            
+            # with open(next_signals_path, "w") as f:
+            #     print(next_signals)
+            #     serialized_signals = copy.deepcopy(next_signals)
+            #     for index, tx in enumerate(serialized_signals["signals"]):
+            #         serialized_signals["signals"][index] = tx.serialize().hex()
+            #     json.dump(serialized_signals, f, indent=2)
+            
+            
+            updates_path = f"{block_folder}/updates.json"
+            
+            with open(updates_path, "w") as f:
+                json.dump(updates, f, indent=2)
 
         updates.sort(key=lambda update: update["targetVersionId"])
 
@@ -197,18 +240,28 @@ class Btc1Resolver():
             target_version_id = update["targetVersionId"]
             if target_version_id <= current_version_id:
                 self.confirm_duplicate_update(update, update_hash_history)
-            if target_version_id == current_version_id + 1:
-                if base58.b58decode(update["sourceHash"]) != contemporary_hash:
+            elif target_version_id == current_version_id + 1:
+                print(update["sourceHash"], bytes_to_str(base58.b58encode(contemporary_hash)))
+                if update["sourceHash"] != bytes_to_str(base58.b58encode(contemporary_hash)):
                     raise Exception("Late Publishing")
-                contemporary_document = self.apply_did_update(contemporary_document, update)
+                print("Apply DID Update", update)
+                contemporary_document = self.apply_did_update(contemporary_document, update).model_copy(deep=True)
+                if self.logging:
+                    contemporary_path = f"{block_folder}/contemporaryDidDocument.json"
+                    with open(contemporary_path, "w") as f:
+                        json.dump(contemporary_document.serialize(), f, indent=2)
+                        
                 current_version_id += 1
-                if current_version_id == target_version_id:
-                    print("Found document for target version", contemporary_document)
                 updateHash = sha256(jcs.canonicalize(update))
                 update_hash_history.append(updateHash)
-                contemporary_hash = sha256(jcs.canonicalize(contemporary_document))
-            if target_version_id > current_version_id + 1:
-                raise Exception("Late publishing") 
+                contemporary_hash = bytes_to_str(base58.b58encode(contemporary_document.canonicalize()))
+                if current_version_id == request_version_id:
+                    print("Found document for target version", contemporary_document)
+                    return contemporary_document
+
+            elif target_version_id > current_version_id + 1:
+                print(target_version_id, current_version_id)
+                raise Exception(f"Late publishing {target_version_id} {current_version_id}") 
         
         print("Tracking", contemporary_blockheight, target_blockheight)
         if contemporary_blockheight == target_blockheight:
@@ -220,7 +273,7 @@ class Btc1Resolver():
         target_document = await self.traverse_blockchain_history(contemporary_document,
                                                             contemporary_blockheight,
                                                             current_version_id,
-                                                            target_version_id,
+                                                            request_version_id,
                                                             target_blockheight,
                                                             update_hash_history,
                                                             signals_metadata,
@@ -230,9 +283,9 @@ class Btc1Resolver():
 
     async def find_next_signals(self, beacons, contemporary_blockheight, target_blockheight, network):
         signals = []
-
         block_hash = await self.bitcoinrpc.getblockhash(contemporary_blockheight)
         block = await self.bitcoinrpc.getblock(block_hash)
+        # print("CHecking block ", contemporary_blockheight)
         for txid in block["tx"]:
             if txid not in COINBASE_TXIDS:
                 tx_hex = await self.bitcoinrpc.getrawtransaction(txid, verbose=False)
@@ -249,18 +302,18 @@ class Btc1Resolver():
 
                         beacon_signal = None
                         for beacon in beacons:
-                            if beacon["address"] == spent_tx_output_address:
+                            if beacon.address() == spent_tx_output_address:
                                 beacon_signal = {
-                                    "beaconId": beacon["id"],
-                                    "beaconType": beacon["type"],
+                                    "beaconId": beacon.id,
+                                    "beaconType": beacon.type,
                                     "tx": tx
                                 }
                                 signals.append(beacon_signal)
                                 print("Found Beacon Signal", tx)
-                                break
+                                # break
                         
-                        if beacon_signal:
-                            break
+                        # if beacon_signal:
+                        #     break
 
         if contemporary_blockheight == target_blockheight:
             next_signals = {
@@ -289,7 +342,7 @@ class Btc1Resolver():
             signal_id = signal_tx.id()
             signal_sidecar_data = signals_metadata.get(signal_id)
             did_update_payload = None
-            if type == SINGLETON_BEACON:
+            if type == "SingletonBeacon":
                 did_update_payload = self.process_singleton_beacon_signal(signal_tx, signal_sidecar_data)
 
             if did_update_payload:
@@ -336,22 +389,23 @@ class Btc1Resolver():
         return    
 
         
-    def apply_did_update(contemporary_document, update):
+    def apply_did_update(self, contemporary_document, update):
         # Retrieve the verification method used to secure the proof from the contemporary DID document
         capability_id = update["proof"]["capability"]
+        document_to_update = contemporary_document.model_copy(deep=True)
 
-        root_capability = dereference_root_capability(capability_id)
+        root_capability = self.dereference_root_capability(capability_id)
         
         proof_vm_id = update["proof"]["verificationMethod"]
-        btc1_identifier = contemporary_document["id"]
+        btc1_identifier = document_to_update.id
         verification_method = None
-        for vm in contemporary_document["verificationMethod"]:
-            vm_id = vm["id"]
+        for vm in document_to_update.verification_method:
+            vm_id = vm.id
             if vm_id[0] == "#":
                 vm_id = f"{btc1_identifier}{vm_id}"
             if vm_id == proof_vm_id:
                 print("Verification Method found", vm)
-                verification_method = vm
+                verification_method = vm.serialize()
         if verification_method == None:
             raise Exception("Invalid Proof on Update Payload")
         multikey = SchnorrSecp256k1Multikey.from_verification_method(verification_method)
@@ -371,7 +425,7 @@ class Btc1Resolver():
         if not verificationResult["verified"]:
             raise Exception("invalidUpdateProof")
 
-        target_did_document = copy.deepcopy(contemporary_document)
+        target_did_document = copy.deepcopy(document_to_update.serialize())
 
         update_patch = update["patch"]
 
@@ -379,13 +433,27 @@ class Btc1Resolver():
         
         target_did_document = patch.apply(target_did_document)
 
-        target_hash = sha256(jcs.canonicalize(target_did_document))
+        target_hash = bytes_to_str(base58.b58encode(sha256(jcs.canonicalize(target_did_document))))
 
-        update_target_hash = base58.b58decode(update["targetHash"])
-        if (target_hash == update_target_hash):
+        target_doc = Btc1Document.model_validate(target_did_document)
+        
+        serialzied_doc = target_doc.serialize()
+        
+        compare_dictionaries(serialzied_doc, target_did_document)
+        
+        
+        test_hash = bytes_to_str(base58.b58encode(target_doc.canonicalize()))
+
+        print(update["targetHash"], target_hash)
+        if (target_hash != update["targetHash"]):
+            raise Exception("LatePublishingError")
+        
+        if (target_hash != test_hash):
             raise Exception("LatePublishingError")
 
-        return target_did_document
+        return Btc1Document.deserialize(target_did_document)
+    
+    
 
     def dereference_root_capability(self, capability_id):
     
@@ -403,3 +471,11 @@ class Btc1Resolver():
             "invocationTarget": btc1Identifier
         }
         return root_capability
+
+def compare_dictionaries(dict1, dict2):
+    if len(dict1) != len(dict2):
+        return False
+    for key in dict1:
+        if key not in dict2 or dict1[key] != dict2[key]:
+            return False
+    return True

@@ -9,7 +9,7 @@ from buidl.ecc import S256Point
 from ..service import SingletonBeaconService
 from ..did import PLACEHOLDER_DID, KEY
 from typing import Iterator, List, Optional, Type, Union
-from .doc import IntermediateBtc1DIDDocument
+from .doc import IntermediateBtc1DIDDocument, Btc1Document
 from ..did import encode_identifier
 from ..multikey import get_public_key_multibase
 
@@ -42,11 +42,12 @@ class Btc1DIDDocumentBuilder(DIDDocumentBuilder):
         controller: Union[List[str], List[DID]] = None,
     ):
         super().__init__(id=id, context=context, also_known_as=also_known_as, controller=controller)
+        self.context = context or self.__default_context()
         self.service = Btc1ServiceBuilder(self.id)
 
     @staticmethod
     def __default_context() -> List[str]:
-        return ["https://www.w3.org/ns/did/v1", "https://did-btc1/TBD/context"]
+        return ["https://www.w3.org/TR/did-1.1", "https://did-btc1/TBD/context"]
     
     @classmethod
     def from_secp256k1_key(cls, initial_key: S256Point, network="bitcoin", version=1):
@@ -55,7 +56,7 @@ class Btc1DIDDocumentBuilder(DIDDocumentBuilder):
 
         builder = cls(
             id=did_btc1,
-            controller=did_btc1,
+            controller=[did_btc1],
         )
 
         vm_id = "initialKey"
@@ -82,15 +83,31 @@ class Btc1DIDDocumentBuilder(DIDDocumentBuilder):
             network = "signet"
 
         p2pkh_address = initial_key.p2pkh_script().address(network)
-        builder.service.add_singleton_beacon(p2pkh_address, "#initialP2PKH")
+        builder.service.add_singleton_beacon(p2pkh_address, "initialP2PKH")
 
         p2wpkh_address = initial_key.p2wpkh_address(network=network)
-        builder.service.add_singleton_beacon(p2wpkh_address, "#initialP2WPKH")
+        builder.service.add_singleton_beacon(p2wpkh_address, "initialP2WPKH")
 
         p2tr_address = initial_key.p2tr_address(network=network)
-        builder.service.add_singleton_beacon(p2tr_address, "#initialP2TR")
+        builder.service.add_singleton_beacon(p2tr_address, "initialP2TR")
 
         return builder
+    
+    def build(self) -> Btc1Document:
+        return Btc1Document.model_construct(
+            id=self.id,
+            context=self.context,
+            also_known_as=self.also_known_as,
+            controller=self.controller,
+            verification_method=self.verification_method.methods or None,
+            authentication=self.authentication.methods or None,
+            assertion_method=self.assertion_method.methods or None,
+            key_agreement=self.key_agreement.methods or None,
+            capability_invocation=self.capability_invocation.methods or None,
+            capability_delegation=self.capability_delegation.methods or None,
+            service=self.service.services or None,
+            **self.extra,
+        )
 
 class IntermediateBtc1DIDDocumentBuilder(Btc1DIDDocumentBuilder):
     def __init__(
@@ -103,7 +120,7 @@ class IntermediateBtc1DIDDocumentBuilder(Btc1DIDDocumentBuilder):
         super().__init__(id=PLACEHOLDER_DID, context=context, also_known_as=also_known_as, controller=controller)
 
     def build(self) -> IntermediateBtc1DIDDocument:
-        return IntermediateBtc1DIDDocument(
+        return IntermediateBtc1DIDDocument.model_construct(
             context=self.context,
             also_known_as=self.also_known_as,
             controller=self.controller,
@@ -120,11 +137,13 @@ class IntermediateBtc1DIDDocumentBuilder(Btc1DIDDocumentBuilder):
     @classmethod
     def from_doc(cls, doc: DIDDocument) -> "IntermediateBtc1DIDDocumentBuilder":
         builder = cls(
-            id=PLACEHOLDER_DID,
             context=doc.context,
             also_known_as=doc.also_known_as,
             controller=doc.controller,
         )
+        
+        vm = doc.verification_method.model_copy(deep=True)
+        vm.id = PLACEHOLDER_DID
         builder.verification_method = VerificationMethodBuilder(
             PLACEHOLDER_DID, methods=doc.verification_method
         )

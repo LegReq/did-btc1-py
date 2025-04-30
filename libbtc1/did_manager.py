@@ -11,6 +11,7 @@ from .diddoc.updater import Btc1DIDDocumentUpdater
 from buidl.tx import Tx, TxIn, TxOut, SIGHASH_DEFAULT
 from buidl.script import ScriptPubKey, address_to_script_pubkey
 from buidl.ecc import PrivateKey
+import json
 
 class DIDManager():
 
@@ -62,10 +63,12 @@ class DIDManager():
         identifier = encode_identifier(EXTERNAL, version, network, genesis_bytes)
 
         did_document = intermediate_document.to_did_document(identifier)
+        
+        print(json.dumps(did_document.serialize(), indent=2))
 
         self.did = did_document.id
         self.version = 1
-        self.initial_document = did_document
+        self.initial_document = did_document.model_copy(deep=True)
         self.document = did_document
         self.signals_metadata = {}
 
@@ -74,13 +77,16 @@ class DIDManager():
     
 
     def updater(self):
-        builder = Btc1DIDDocumentBuilder.from_doc(self.document)
+        builder = Btc1DIDDocumentBuilder.from_doc(self.document.model_copy(deep=True))
+        print(json.dumps(self.document.serialize(), indent=2))
         updater = Btc1DIDDocumentUpdater(builder, self.version)
         return updater
     
     async def announce_update(self, beacon_id, beacon_sk, secured_update):
         beacon_service = None
+        print(beacon_id)
         for service in self.document.service:
+            print(service)
             if service.id == beacon_id:
                 beacon_service = service
                 break
@@ -138,7 +144,7 @@ class DIDManager():
         
         signed_hex = pending_beacon_signal.serialize().hex()
         signal_id = await self.bitcoinrpc.acall("sendrawtransaction", {"hexstring": signed_hex})
-
+        
         self.signals_metadata[signal_id] = {
             "updatePayload": secured_update
         }
@@ -165,7 +171,7 @@ class DIDManager():
         }
 
         if self.initial_document:
-            sidecarData["initialDocument"] = self.initial_document
+            sidecarData["initialDocument"] = self.initial_document.serialize()
 
         if self.signals_metadata:
             sidecarData["signalsMetadata"] = self.signals_metadata
