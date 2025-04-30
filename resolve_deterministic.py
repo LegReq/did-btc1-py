@@ -4,7 +4,7 @@ import json
 
 async def resolve_deterministic():
   
-    test_folder_path = "TestVectors/k1qgpswh5adnhrvk9vpppgcx08k4eek75c52dr9pcvu2zt5zgakartekc4uzg54"
+    test_folder_path = "TestVectors/x1q20n602dgh7awm6akhgne0mjcmfpnjpc9jrqnrzuuexglrmklzm6u98hgvp"
   
     with open(f"{test_folder_path}/did.txt", 'r') as f:
         # Read the contents of the file into a variable

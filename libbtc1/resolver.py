@@ -216,9 +216,9 @@ class Btc1Resolver():
         updates = self.process_beacon_signals(signals, signals_metadata)
         
         if self.logging and len(updates) != 0:
-            block_folder = f"{self.log_folder}/block{contemporary_blockheight}"
-            if not os.path.exists(block_folder):
-                os.makedirs(block_folder)
+            self.block_folder = f"{self.log_folder}/block{contemporary_blockheight}"
+            if not os.path.exists(self.block_folder):
+                os.makedirs(self.block_folder)
             # next_signals_path = f"{block_folder}/next_signals.json"
             
             # with open(next_signals_path, "w") as f:
@@ -229,7 +229,7 @@ class Btc1Resolver():
             #     json.dump(serialized_signals, f, indent=2)
             
             
-            updates_path = f"{block_folder}/updates.json"
+            updates_path = f"{self.block_folder}/updates.json"
             
             with open(updates_path, "w") as f:
                 json.dump(updates, f, indent=2)
@@ -247,7 +247,7 @@ class Btc1Resolver():
                 print("Apply DID Update", update)
                 contemporary_document = self.apply_did_update(contemporary_document, update).model_copy(deep=True)
                 if self.logging:
-                    contemporary_path = f"{block_folder}/contemporaryDidDocument.json"
+                    contemporary_path = f"{self.block_folder}/contemporaryDidDocument.json"
                     with open(contemporary_path, "w") as f:
                         json.dump(contemporary_document.serialize(), f, indent=2)
                         
@@ -419,6 +419,17 @@ class Btc1Resolver():
         expected_proof_purpose = "capabilityInvocation"
 
         update_bytes = json.dumps(update)
+
+        if self.logging:
+            canonical_update = jcs.canonicalize(update)
+            update_hash = sha256(canonical_update)
+
+            with open(f"{self.block_folder}/canonical_document.txt", "w") as f:
+                f.write(bytes_to_str(canonical_update))
+
+            with open(f"{self.block_folder}/update_hash_hex.txt", "w") as f:
+                f.write(update_hash.hex())
+
 
         verificationResult = di_proof.verify_proof(mediaType, update_bytes, expected_proof_purpose, None, None)
 
