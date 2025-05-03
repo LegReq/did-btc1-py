@@ -1,0 +1,47 @@
+{
+  "@context": [
+    "https://www.w3.org/TR/did-1.1",
+    "https://did-btc1/TBD/context"
+  ],
+  "id": "did:btc1:k1qgpytylta78kkg80t8rchjy2gmz4cy4vdd5fx7td407xdvwqzt39ztsrncrna",
+  "controller": [
+    "did:btc1:k1qgpytylta78kkg80t8rchjy2gmz4cy4vdd5fx7td407xdvwqzt39ztsrncrna"
+  ],
+  "verificationMethod": [
+    {
+      "id": "did:btc1:k1qgpytylta78kkg80t8rchjy2gmz4cy4vdd5fx7td407xdvwqzt39ztsrncrna#initialKey",
+      "type": "Multikey",
+      "controller": "did:btc1:k1qgpytylta78kkg80t8rchjy2gmz4cy4vdd5fx7td407xdvwqzt39ztsrncrna",
+      "publicKeyMultibase": "zQ3shS6PiAEru9WhnNKqy3nPWhp8Hp9W7Qm3CSX7VZoa9C1bb"
+    }
+  ],
+  "authentication": [
+    "did:btc1:k1qgpytylta78kkg80t8rchjy2gmz4cy4vdd5fx7td407xdvwqzt39ztsrncrna#initialKey"
+  ],
+  "assertionMethod": [
+    "did:btc1:k1qgpytylta78kkg80t8rchjy2gmz4cy4vdd5fx7td407xdvwqzt39ztsrncrna#initialKey"
+  ],
+  "capabilityInvocation": [
+    "did:btc1:k1qgpytylta78kkg80t8rchjy2gmz4cy4vdd5fx7td407xdvwqzt39ztsrncrna#initialKey"
+  ],
+  "capabilityDelegation": [
+    "did:btc1:k1qgpytylta78kkg80t8rchjy2gmz4cy4vdd5fx7td407xdvwqzt39ztsrncrna#initialKey"
+  ],
+  "service": [
+    {
+      "id": "did:btc1:k1qgpytylta78kkg80t8rchjy2gmz4cy4vdd5fx7td407xdvwqzt39ztsrncrna#initialP2PKH",
+      "type": "SingletonBeacon",
+      "serviceEndpoint": "bitcoin:mjWSN55yK8fpLp3eF7QJ8GF7NoMUQeuF2L"
+    },
+    {
+      "id": "did:btc1:k1qgpytylta78kkg80t8rchjy2gmz4cy4vdd5fx7td407xdvwqzt39ztsrncrna#initialP2WPKH",
+      "type": "SingletonBeacon",
+      "serviceEndpoint": "bitcoin:bcrt1q90rcf2d2ytud98xv636m23xp2sd3pm2zk55hwu"
+    },
+    {
+      "id": "did:btc1:k1qgpytylta78kkg80t8rchjy2gmz4cy4vdd5fx7td407xdvwqzt39ztsrncrna#initialP2TR",
+      "type": "SingletonBeacon",
+      "serviceEndpoint": "bitcoin:bcrt1pa0d0dl5hw0y5sykyqwx9970wqryv9v7jwzcjkchh55z57ukkwzlsn2qv8j"
+    }
+  ]
+}

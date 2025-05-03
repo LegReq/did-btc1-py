@@ -12,6 +12,7 @@ from libbtc1.diddoc.builder import Btc1DIDDocumentBuilder, IntermediateBtc1DIDDo
 from libbtc1.multikey import get_public_key_multibase
 import os
 from libbtc1.did_manager import DIDManager
+from libbtc1.beacon_manager import BeaconManager
 from libbtc1.diddoc.builder import Btc1ServiceBuilder
 import time
 
@@ -74,7 +75,7 @@ async def generate_deterministic_test_vector():
 
     did_manager = DIDManager(network=network, rpc_endpoint=rpc_endpoint, rpcuser="polaruser", rpcpassword="polarpass")
     
-    identifier, did_doc = did_manager.create_deterministic(initial_pk, network)
+    identifier, did_doc = await did_manager.create_deterministic(initial_sk, network)
     
     
     print(json.dumps(did_doc.serialize(), indent=2))
@@ -119,71 +120,73 @@ async def generate_deterministic_test_vector():
 
     updater.add_service(new_beacon_service)
     
+    # beacon_manager = BeaconManager()
+    
     beacon_id = did_doc.service[1].id
 
     vm_id = did_doc.verification_method[0].id
 
-    updated_doc = await did_manager.finalize_update_payload(updater, vm_id, initial_sk, beacon_id, initial_sk)
+    updated_doc = await did_manager.finalize_update_payload(updater, vm_id, initial_sk, beacon_id)
     
     doc_v2 = updated_doc.model_copy(deep=True)
-    time.sleep(120)
+    # time.sleep(120)
     
-    updater = did_manager.updater()
+    # updater = did_manager.updater()
     
-    new_vm_sk = root_hdpriv.get_private_key(didkey_purpose, address_num=3)
+    # new_vm_sk = root_hdpriv.get_private_key(didkey_purpose, address_num=3)
     
-    new_vm_pk = new_vm_sk.point
+    # new_vm_pk = new_vm_sk.point
     
-    new_pk_multibase = get_public_key_multibase(new_vm_pk.sec())
+    # new_pk_multibase = get_public_key_multibase(new_vm_pk.sec())
 
-    vm_builder = VerificationMethodBuilder(identifier, methods=updated_doc.verification_method)
+    # vm_builder = VerificationMethodBuilder(identifier, methods=updated_doc.verification_method)
     
-    new_vm = vm_builder.add(Multikey, public_key_multibase=new_pk_multibase)
+    # new_vm = vm_builder.add(Multikey, public_key_multibase=new_pk_multibase)
     
-    updater.add_verification_method(new_vm)
+    # updater.add_verification_method(new_vm)
         
-    second_updated_doc = await did_manager.finalize_update_payload(updater, vm_id, initial_sk, new_beacon_service.id, new_beacon_sk)
+    # second_updated_doc = await did_manager.finalize_update_payload(updater, vm_id, initial_sk, new_beacon_service.id)
 
     
-    keys[new_beacon_service.id] = {
-            "pk": new_beacon_sk.point.sec().hex(),
-            "sk": new_beacon_sk.hex()
-    }
-    keys[new_vm.id] = {
-            "pk": new_vm_pk.sec().hex(),
-            "sk": new_vm_sk.hex()
-    }
+    # keys[new_beacon_service.id] = {
+    #         "pk": new_beacon_sk.point.sec().hex(),
+    #         "sk": new_beacon_sk.hex()
+    # }
+    # keys[new_vm.id] = {
+    #         "pk": new_vm_pk.sec().hex(),
+    #         "sk": new_vm_sk.hex()
+    # }
     
     
-    keys_path = f"{folder_path}/keys.json"
+    # keys_path = f"{folder_path}/keys.json"
     
-    with open(keys_path, "w") as f:
-        json.dump(keys, f, indent=2)
+    # with open(keys_path, "w") as f:
+    #     json.dump(keys, f, indent=2)
         
     
-    print("Updated Doc")
-    print(json.dumps(second_updated_doc.serialize(), indent=2))
-    print("Sidecar data")
-    print(json.dumps(did_manager.get_sidecar_data(), indent=2))
+    # print("Updated Doc")
+    # print(json.dumps(second_updated_doc.serialize(), indent=2))
+    # print("Sidecar data")
+    # print(json.dumps(did_manager.get_sidecar_data(), indent=2))
     
         
-    target_doc_path = f"{folder_path}/didDocumentv2.json"
+    # target_doc_path = f"{folder_path}/didDocumentv2.json"
     
-    with open(target_doc_path, "w") as f:
-        json.dump(doc_v2.serialize(), f, indent=2)
+    # with open(target_doc_path, "w") as f:
+    #     json.dump(doc_v2.serialize(), f, indent=2)
         
-    target_doc_path = f"{folder_path}/targetDidDocument.json"
+    # target_doc_path = f"{folder_path}/targetDidDocument.json"
     
-    with open(target_doc_path, "w") as f:
-        json.dump(second_updated_doc.serialize(), f, indent=2)
+    # with open(target_doc_path, "w") as f:
+    #     json.dump(second_updated_doc.serialize(), f, indent=2)
     
-    resolution_options = {
-        "sidecarData": did_manager.get_sidecar_data()
-    }
+    # resolution_options = {
+    #     "sidecarData": did_manager.get_sidecar_data()
+    # }
     
-    res_options_path = f"{folder_path}/resolutionOptions.json"
+    # res_options_path = f"{folder_path}/resolutionOptions.json"
     
-    with open(res_options_path, "w") as f:
-        json.dump(resolution_options, f, indent=2)
+    # with open(res_options_path, "w") as f:
+    #     json.dump(resolution_options, f, indent=2)
     
 asyncio.run(generate_deterministic_test_vector())
