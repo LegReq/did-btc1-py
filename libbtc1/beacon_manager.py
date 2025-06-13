@@ -1,38 +1,17 @@
 from buidl.tx import TxIn, TxOut, Tx
 from buidl.script import ScriptPubKey, address_to_script_pubkey
+from .address_manager import AddressManager
 
-class BeaconManager():
+class BeaconManager(AddressManager):
 
-    def __init__(self, bitcoin_rpc, network, beacon_id, signing_key, script_pubkey):
-        self.bitcoin_rpc = bitcoin_rpc
-        self.network = network
+    def __init__(self, network, beacon_id, signing_key, script_pubkey, esplora_client):
         self.beacon_id = beacon_id
-        self.signing_key = signing_key
-        self.script_pubkey = script_pubkey
-        self.address = script_pubkey.address(network)
-        self.utxos = self.fetch_utxos()
-
+        super().__init__(esplora_client, network, script_pubkey, signing_key)
         
-
-    def fetch_utxos(self):
-        # TODO: get UTXOs for address
-        print("TODO")
-        return []
-
-    def add_funding_tx(self, funding_tx):
-        print("Adding funding TX")
-        for index, tx_out in enumerate(funding_tx.tx_outs):
-            print(self.address, tx_out.script_pubkey.address(network=self.network))
-            if self.address == tx_out.script_pubkey.address(network=self.network):
-                print("Found funding TXOUT")
-                tx_in = TxIn(prev_tx=funding_tx.hash(), prev_index=index)
-                tx_in._script_pubkey = tx_out.script_pubkey
-                tx_in._value = tx_out.amount
-                self.utxos.append(tx_in)
-
+        
     def construct_beacon_signal(self, commitment_bytes):
         if len(self.utxos) == 0:
-            raise Exception("No UTXOs, fund beacon")
+            raise Exception(f"No UTXOs, fund beacon address {self.address}")
         
         tx_in = self.utxos.pop(0)
 
@@ -48,10 +27,10 @@ class BeaconManager():
         refund_out = TxOut(amount=refund_amount, script_pubkey=refund_script_pubkey)
         tx_ins = [tx_in]
 
-        tx_outs = [beacon_signal_txout, refund_out]
+        tx_outs = [refund_out, beacon_signal_txout]
         pending_beacon_signal = Tx(version=1, tx_ins=tx_ins, tx_outs=tx_outs, network=self.network,segwit=True)
 
-        new_utxo_txin = TxIn(prev_tx=pending_beacon_signal.hash(), prev_index=1)
+        new_utxo_txin = TxIn(prev_tx=pending_beacon_signal.hash(), prev_index=0)
         new_utxo_txin._script_pubkey = refund_out.script_pubkey
         new_utxo_txin._value = refund_out.amount
         self.utxos.append(new_utxo_txin)
@@ -68,11 +47,14 @@ class BeaconManager():
         return pending_signal
 
     # TODO: only works on regtest
-    async def fund_beacon_address(self):
-        result = await self.bitcoin_rpc.acall("send", {"outputs": { self.address: 0.2}})
+    # async def fund_beacon_address(self):
+    #     result = await self.bitcoin_rpc.acall("send", {"outputs": { self.address: 0.2}})
+    #     result2 = await self.bitcoin_rpc.acall("send", {"outputs": { self.address: 0.2}})
+    #     result3 = await self.bitcoin_rpc.acall("send", {"outputs": { self.address: 0.2}})
 
-        funding_txid = result["txid"]
-        funding_tx_hex = await self.bitcoin_rpc.acall("getrawtransaction", {"txid": funding_txid})
-        funding_tx = Tx.parse_hex(funding_tx_hex)
+
+    #     funding_txid = result["txid"]
+    #     funding_tx_hex = await self.bitcoin_rpc.acall("getrawtransaction", {"txid": funding_txid})
+    #     funding_tx = Tx.parse_hex(funding_tx_hex)
         
-        self.add_funding_tx(funding_tx)
+    #     self.add_funding_tx(funding_tx)

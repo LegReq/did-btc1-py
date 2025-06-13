@@ -3,7 +3,6 @@ from .did import encode_identifier, KEY, EXTERNAL, NETWORKS, VERSIONS
 import jcs
 from buidl.helper import sha256
 from pydid.doc import DIDDocument
-from bitcoinrpc import BitcoinRPC
 from .did import PLACEHOLDER_DID
 from .diddoc.doc import IntermediateBtc1DIDDocument
 from .diddoc.builder import Btc1DIDDocumentBuilder
@@ -13,11 +12,13 @@ from buidl.script import ScriptPubKey, address_to_script_pubkey
 from buidl.ecc import PrivateKey
 import json
 from .beacon_manager import BeaconManager
+from .esplora_client import EsploraClient
 
 class DIDManager():
 
-    def __init__(self, network, rpc_endpoint, rpcuser, rpcpassword):
-        self.bitcoinrpc = BitcoinRPC.from_config(rpc_endpoint, (rpcuser, rpcpassword))
+    def __init__(self, network, esplora_base="http://localhost:3000"):
+        
+        self.esplora_client = EsploraClient(esplora_base)
         self.pending_updates = []
         self.initial_document = None
         self.beacon_managers = {}
@@ -44,22 +45,12 @@ class DIDManager():
         for beacon in did_document.service:
             if "P2PKH" in beacon.id.fragment:
                 script_pubkey = public_key.p2pkh_script()
-                bm = BeaconManager(self.bitcoinrpc, self.network, beacon.id, initial_sk, script_pubkey)
-                self.beacon_managers[beacon.id] = bm
-                if network == "regtest":
-                    await bm.fund_beacon_address()
+                self.add_beacon_manager(beacon.id, initial_sk, script_pubkey)
             elif "P2WPKH" in beacon.id.fragment:
-                script_pubkey = public_key.p2wpkh_script()
-                bm = BeaconManager(self.bitcoinrpc, self.network, beacon.id, initial_sk, script_pubkey)
-                self.beacon_managers[beacon.id] = bm
-                if network == "regtest":
-                    await bm.fund_beacon_address()
+                self.add_beacon_manager(beacon.id, initial_sk, public_key.p2wpkh_script())
             elif "P2TR" in beacon.id.fragment:
-                script_pubkey = public_key.p2tr_script()
-                bm = BeaconManager(self.bitcoinrpc, self.network, beacon.id, initial_sk, script_pubkey)
-                self.beacon_managers[beacon.id] = bm
-                if network == "regtest":
-                    await bm.fund_beacon_address()
+                self.add_beacon_manager(beacon.id, initial_sk, public_key.p2tr_script())
+
 
         self.did = did_document.id
         self.document = did_document
@@ -120,59 +111,14 @@ class DIDManager():
 
         # print("Beaocn Address", beacon_address)
 
-        # beacon_address = beacon_address.replace("bitcoin:", "")
-
-        ## TODO: Need to know the availabel UTXOs that can be spend for a particular beacon
-        # signing_res = await self.bitcoinrpc.acall("send", {"outputs": { beacon_address: 0.2}})
-
-        # funding_txid = signing_res["txid"]
-
-        # funding_tx_hex = await self.bitcoinrpc.acall("getrawtransaction", {"txid": funding_txid})
-        # funding_tx = Tx.parse_hex(funding_tx_hex)
-        # print("Funding Tx", funding_tx)
-        # for index, tx_out in enumerate(funding_tx.tx_outs):
-        #     if beacon_address == tx_out.script_pubkey.address(network=self.network):
-        #         prev_index = index
-        #         break
-        #     # print("TXOUT", )
-        # prev_tx = bytes.fromhex(funding_txid)  # Identifying funding tx
-
-        # tx_in = TxIn(prev_tx=prev_tx, prev_index=prev_index)
-        # tx_in._script_pubkey = funding_tx.tx_outs[prev_index].script_pubkey
-        # tx_in._value = funding_tx.tx_outs[prev_index].amount
-            
         update_hash = sha256(jcs.canonicalize(secured_update))
 
         pending_beacon_signal = beacon_manager.construct_beacon_signal(update_hash)
 
         signed_tx = beacon_manager.sign_beacon_signal(pending_beacon_signal)
 
-        signal_id = await self.bitcoinrpc.acall("sendrawtransaction", {"hexstring": signed_tx.serialize().hex()})
+        signal_id = self.esplora_client.broadcast_tx(signed_tx.serialize().hex())
 
-        # script_pubkey = ScriptPubKey([0x6a, update_hash])
-
-        # beacon_signal_txout = TxOut(0, script_pubkey)
-
-        # tx_fee = 350
-
-        # refund_amount = tx_in.value() - tx_fee
-
-        
-        # refund_script_pubkey = beacon_sk.point.p2wpkh_script()
-        # refund_out = TxOut(amount=refund_amount, script_pubkey=refund_script_pubkey)
-        # tx_ins = [tx_in]
-
-        # tx_outs = [beacon_signal_txout, refund_out]
-        # pending_beacon_signal = Tx(version=1, tx_ins=tx_ins, tx_outs=tx_outs, network=self.network,segwit=True)
-
-        # signing_res = pending_beacon_signal.sign_input(0, beacon_sk)
-        # print(signing_res)
-        # if not signing_res:
-        #     raise Exception("Invalid Beacon Key, unable to sign signal")
-        
-        # signed_hex = pending_beacon_signal.serialize().hex()
-        # signal_id = await self.bitcoinrpc.acall("sendrawtransaction", {"hexstring": signed_hex})
-        
         self.signals_metadata[signal_id] = {
             "updatePayload": secured_update
         }
@@ -190,7 +136,13 @@ class DIDManager():
             raise Exception("Error announcing")
         return self.document
 
-
+    def add_beacon_manager(self, beacon_id, initial_sk, script_pubkey):
+        if beacon_id in self.beacon_managers:
+            raise Exception("Beacon already exists")
+        
+        bm = BeaconManager(self.network, beacon_id, initial_sk, script_pubkey, self.esplora_client)
+        self.beacon_managers[beacon_id] = bm
+        return bm
 
 
     def get_sidecar_data(self):

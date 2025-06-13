@@ -6,7 +6,6 @@ import jcs
 import os
 import json
 import copy
-from bitcoinrpc import BitcoinRPC
 from ipfs_cid import cid_sha256_wrap_digest
 import urllib
 import jsonpatch
@@ -23,6 +22,9 @@ from .diddoc.builder import Btc1DIDDocumentBuilder, IntermediateBtc1DIDDocumentB
 from .diddoc.doc import Btc1Document, IntermediateBtc1DIDDocument
 from .helper import canonicalize_and_hash
 from .service import BeaconTypeNames, SingletonBeaconService
+from .esplora_client import EsploraClient
+import datetime
+
 CONTEXT = ["https://www.w3.org/ns/did/v1", "https://did-btc1/TBD/context"]
 
 
@@ -37,28 +39,26 @@ P2TR = "p2tr"
 
 class Btc1Resolver():
     
-    def __init__(self, rpc_endpoint, rpcuser, rpcpassword, logging=False, log_folder="TestVectors"):
-        self.bitcoinrpc = BitcoinRPC.from_config(rpc_endpoint, (rpcuser, rpcpassword))
+    def __init__(self, esplora_base="http://localhost:3000", logging=False, log_folder="TestVectors"):
+        self.esplora_client = EsploraClient(esplora_base)
         self.logging = logging
-        self.log_folder = f"{os.getcwd()}/{log_folder}"
+        self.log_base_folder = log_folder
 
 
 
     async def resolve(self, identifier, resolution_options=None):
     
-        if self.logging == True:
-            did_path = identifier.split(":")[2]
-            self.log_folder = f"{self.log_folder}/{did_path}"
-            if not os.path.exists(self.log_folder):
-                os.makedirs(self.log_folder)
 
         id_type, version, network, genesis_bytes = decode_identifier(identifier)
 
         print("ID Components", id_type, version, network, genesis_bytes.hex())
-        blockchain_info = await self.bitcoinrpc.getblockchaininfo()
-        chain = blockchain_info["chain"]
-        if chain != network:
-            raise Exception(f"RPC connected to incorrect chain {chain}")
+
+        if self.logging == True:
+            did_path = identifier.split(":")[2]
+            self.log_folder = f"{self.log_base_folder}/{network}/{did_path}"
+            if not os.path.exists(self.log_folder):
+                os.makedirs(self.log_folder)
+
 
         if id_type == KEY:
             initial_did_document = self.resolve_deterministic(identifier, 
@@ -134,13 +134,13 @@ class Btc1Resolver():
 
     async def resolve_target_document(self, initial_document: DIDDocument, resolution_options, network):
         request_version_id = resolution_options.get("versionId")
-        versionTime = resolution_options.get("versionTime")
+        version_time = resolution_options.get("versionTime")
 
-        if request_version_id and versionTime:
-            raise Exception("InvalidResolutionOptions - cannot have versionTime and targetTime")
+        if request_version_id and version_time:
+            raise Exception("InvalidResolutionOptions - cannot have versionTime and versionId")
 
-        if not request_version_id:
-            target_blockheight = await self.determine_target_blockheight(versionTime) 
+        if not request_version_id and not version_time:
+            version_time = datetime.datetime.now().timestamp()
 
         sidecar_data = resolution_options.get("sidecarData")
 
@@ -163,28 +163,13 @@ class Btc1Resolver():
                                                            contemporary_blockheight, 
                                                            current_version_id, 
                                                            request_version_id, 
-                                                           target_blockheight, 
+                                                           version_time, 
                                                            update_hash_history, 
                                                            signals_metadata, 
                                                            network)
 
         return target_document
 
-    # TODO: Remove
-    async def determine_target_blockheight(self, versionTime):
-        if versionTime:
-            raise NotImplemented
-        
-        required_confirmations = 6
-
-        best_blockhash = await self.bitcoinrpc.acall("getbestblockhash", {})
-        bestblock = await self.bitcoinrpc.acall("getblock", {"blockhash": best_blockhash})
-
-        confirmations = bestblock["confirmations"]
-        bestblock_height = bestblock["height"]
-        target_blockheight = bestblock_height + (confirmations - required_confirmations)
-
-        return target_blockheight
     
 
     async def traverse_blockchain_history(self, 
@@ -192,7 +177,7 @@ class Btc1Resolver():
                                           contemporary_blockheight, 
                                           current_version_id, 
                                           request_version_id, 
-                                          target_blockheight, 
+                                          target_time, 
                                           update_hash_history, 
                                           signals_metadata,
                                           network):
@@ -203,18 +188,26 @@ class Btc1Resolver():
             if service.type in BeaconTypeNames:
                 beacons.append(service)
 
-        next_signals = await self.find_next_signals(beacons, contemporary_blockheight, target_blockheight, network)
-
-
-                
+        next_signals = await self.find_next_signals(beacons, contemporary_blockheight, network)
+        print("Next Signals", next_signals)
+        if len(next_signals) == 0:
+            return contemporary_document
+        
+        
+        # print("Next Signals", next_signals[0]['status']["block_time"], target_time)
+        if next_signals[0]["block_time"] > target_time:
+            return contemporary_document
+        
         
 
-        contemporary_blockheight = next_signals["blockheight"]
-        print(contemporary_blockheight, target_blockheight)
-        signals = next_signals["signals"]
+        contemporary_blockheight = next_signals[0]["block_height"]
+        print(contemporary_blockheight, target_time)
+        # signals = next_signals["signals"]
 
-        updates = self.process_beacon_signals(signals, signals_metadata)
+        updates = self.process_beacon_signals(next_signals, signals_metadata)
         
+        print("Updates", updates)
+
         if self.logging and len(updates) != 0:
             self.block_folder = f"{self.log_folder}/block{contemporary_blockheight}"
             if not os.path.exists(self.block_folder):
@@ -263,8 +256,8 @@ class Btc1Resolver():
                 print(target_version_id, current_version_id)
                 raise Exception(f"Late publishing {target_version_id} {current_version_id}") 
         
-        print("Tracking", contemporary_blockheight, target_blockheight)
-        if contemporary_blockheight == target_blockheight:
+        print("Tracking", contemporary_blockheight, target_time)
+        if contemporary_blockheight == target_time:
             print("Got to target", contemporary_blockheight)
             return contemporary_document
         
@@ -274,63 +267,51 @@ class Btc1Resolver():
                                                             contemporary_blockheight,
                                                             current_version_id,
                                                             request_version_id,
-                                                            target_blockheight,
+                                                            target_time,
                                                             update_hash_history,
                                                             signals_metadata,
                                                             network)
 
         return target_document
 
-    async def find_next_signals(self, beacons, contemporary_blockheight, target_blockheight, network):
+    async def find_next_signals(self, beacons, contemporary_blockheight, network):
         signals = []
-        block_hash = await self.bitcoinrpc.getblockhash(contemporary_blockheight)
-        block = await self.bitcoinrpc.getblock(block_hash)
-        # print("CHecking block ", contemporary_blockheight)
-        for txid in block["tx"]:
-            if txid not in COINBASE_TXIDS:
-                tx_hex = await self.bitcoinrpc.getrawtransaction(txid, verbose=False)
-                tx = Tx.parse_hex(tx_hex)
 
-                for tx_in in tx.tx_ins:
-                    prev_txid = tx_in.prev_tx.hex()
-                    if prev_txid not in COINBASE_TXIDS:
-                        prev_tx_hex = await self.bitcoinrpc.getrawtransaction(prev_txid, verbose=False)
-                        prev_tx = Tx.parse_hex(prev_tx_hex)
+        for beacon in beacons:
+            address = beacon.address()
+            txs = self.esplora_client.get_address_transactions(address)
+            for tx_data in txs:
+            # Only care about bitcoin transactions that have been accepted into the chain.
 
-                        spent_tx_output = prev_tx.tx_outs[tx_in.prev_index]
-                        spent_tx_output_address = spent_tx_output.script_pubkey.address(network="regtest")
+                # Skip transactions that haven't been confirmed yet or are from earlier blocks
+                if 'status' not in tx_data or 'block_height' not in tx_data['status']:
+                    continue
+                if tx_data['status']['block_height'] < contemporary_blockheight:
+                    continue
 
-                        beacon_signal = None
-                        for beacon in beacons:
-                            if beacon.address() == spent_tx_output_address:
-                                beacon_signal = {
-                                    "beaconId": beacon.id,
-                                    "beaconType": beacon.type,
-                                    "tx": tx
-                                }
-                                signals.append(beacon_signal)
-                                print("Found Beacon Signal", tx)
-                                # break
-                        
-                        # if beacon_signal:
-                        #     break
+                if any(vin['prevout']['scriptpubkey_address'] == address for vin in tx_data['vin']):
+                    tx_hex = self.esplora_client.get_transaction_hex(tx_data['txid'])
+                    tx = Tx.parse_hex(tx_hex)
+                    signal = {
+                        "beaconId": beacon.id,
+                        "beaconType": beacon.type,
+                        "tx": tx,
+                        "block_height": tx_data['status']['block_height'],
+                        "block_time": tx_data['status']['block_time']
+                    }
+                    signals.append(signal)
 
-        if contemporary_blockheight == target_blockheight:
-            next_signals = {
-                "blockheight": contemporary_blockheight,
-                "signals": signals
-            }
-            return next_signals
+
+        # Sort signals by block height
+        signals.sort(key=lambda signal: signal['block_height'])
         
-        if len(signals) == 0:
-            next_signals = await self.find_next_signals(beacons, contemporary_blockheight+1, target_blockheight, network)
-        else:
-            next_signals = {
-                "blockheight": contemporary_blockheight,
-                "signals": signals
-            }
+        # Only keep signals from the earliest block height found
+        if signals:
+            min_height = signals[0]['block_height']
+            signals = [signal for signal in signals if signal['block_height'] == min_height]
 
-        return next_signals
+
+        return signals
     
 
     def process_beacon_signals(self, signals, signals_metadata):
@@ -343,6 +324,7 @@ class Btc1Resolver():
             signal_sidecar_data = signals_metadata.get(signal_id)
             did_update_payload = None
             if type == "SingletonBeacon":
+                print("Signal ID", signal_id)
                 did_update_payload = self.process_singleton_beacon_signal(signal_tx, signal_sidecar_data)
 
             if did_update_payload:
@@ -351,9 +333,9 @@ class Btc1Resolver():
         return updates
 
     def process_singleton_beacon_signal(self, tx: Tx, signal_sidecar_data):
-        tx_out = tx.tx_outs[0]
+        tx_out = tx.tx_outs[len(tx.tx_outs) - 1]
         did_update_payload = None
-
+        print("TX OUT", tx_out.script_pubkey.commands[1])
         if (tx_out.script_pubkey.commands[0] != 106 and len(tx_out.script_pubkey.commands[1]) != 32):
             print("Not a beacon signal")
             return did_update_payload
@@ -375,7 +357,7 @@ class Btc1Resolver():
         else:
             payload_cid = cid_sha256_wrap_digest(hash_bytes)
             # TODO: Fetch payload from IPFS
-            raise NotImplemented
+            raise Exception("Not implemented")
         
 
     def confirm_duplicate_update(self, update, update_hash_history):
