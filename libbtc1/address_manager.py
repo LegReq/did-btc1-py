@@ -1,6 +1,6 @@
 from buidl.tx import TxIn, Tx, TxOut
 from buidl.script import address_to_script_pubkey
-from buidl.helper import hex_to_bytes
+from buidl.helper import str_to_bytes
 
 class AddressManager():
 
@@ -11,9 +11,6 @@ class AddressManager():
         self.address = script_pubkey.address(network)
         self.signing_key = signing_key
         self.utxo_tx_ins = self.fetch_utxos()
-
-    def get_address(self, address):
-        return self.esplora_client.get_address(address)
     
     def fetch_utxos(self):
         utxos = self.esplora_client.get_address_utxos(self.address)
@@ -21,11 +18,10 @@ class AddressManager():
         for utxo in utxos:
             txid = utxo["txid"]
             prev_index = utxo["vout"]
-            txin = TxIn(prev_tx=hex_to_bytes(txid), prev_index=prev_index)
+            txin = TxIn(prev_tx=str_to_bytes(txid), prev_index=prev_index)
             txin._script_pubkey = self.script_pubkey
             txin._value = utxo["value"]
             tx_ins.append(txin)
-            # txin.serialize()
         print(f"Found {len(utxos)} UTXOs for {self.address}")
         return tx_ins
     
@@ -47,12 +43,13 @@ class AddressManager():
         
         tx_ins = []
         total_value = 0
-        for utxo in self.utxo_tx_ins:
-            total_value += utxo.value()
-            if total_value >= amount + tx_fee:
+        for tx_in in self.utxo_tx_ins:
+            total_value += tx_in.value()
+            tx_ins.append(tx_in)
+            if total_value <= amount + tx_fee:
                 break
         
-        if total_value >= amount + tx_fee:
+        if total_value <= amount + tx_fee:
             raise Exception(f"Address does not control enough value to cover {amount}, fund address {self.address}")
         
 
