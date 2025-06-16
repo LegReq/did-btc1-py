@@ -1,6 +1,6 @@
 from buidl.tx import TxIn, Tx, TxOut
 from buidl.script import address_to_script_pubkey
-from buidl.helpers import hex_to_bytes
+from buidl.helper import hex_to_bytes
 
 class AddressManager():
 
