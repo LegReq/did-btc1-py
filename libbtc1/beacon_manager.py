@@ -19,7 +19,7 @@ class BeaconManager(AddressManager):
 
         beacon_signal_txout = TxOut(0, script_pubkey)
 
-        tx_fee = 350
+        tx_fee = self.tx_fee
 
         refund_amount = tx_in.value() - tx_fee
 

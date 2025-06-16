@@ -45,7 +45,7 @@ class AddressManager():
     
     def send_to_address(self, script_pubkey, amount):
         address = script_pubkey.address(network=self.network)
-        tx_fee = 1000  # satoshis
+        tx_fee = 4000  # satoshis
         
         # Validate amount
         if amount <= 0:
