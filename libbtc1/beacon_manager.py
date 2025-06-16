@@ -10,10 +10,10 @@ class BeaconManager(AddressManager):
         
         
     def construct_beacon_signal(self, commitment_bytes):
-        if len(self.utxos) == 0:
+        if len(self.utxo_tx_ins) == 0:
             raise Exception(f"No UTXOs, fund beacon address {self.address}")
         
-        tx_in = self.utxos.pop(0)
+        tx_in = self.utxo_tx_ins.pop(0)
 
         script_pubkey = ScriptPubKey([0x6a, commitment_bytes])
 
@@ -33,7 +33,7 @@ class BeaconManager(AddressManager):
         new_utxo_txin = TxIn(prev_tx=pending_beacon_signal.hash(), prev_index=0)
         new_utxo_txin._script_pubkey = refund_out.script_pubkey
         new_utxo_txin._value = refund_out.amount
-        self.utxos.append(new_utxo_txin)
+        self.utxo_tx_ins.append(new_utxo_txin)
 
         return pending_beacon_signal
 

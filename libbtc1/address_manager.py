@@ -9,22 +9,23 @@ class AddressManager():
         self.script_pubkey = script_pubkey
         self.address = script_pubkey.address(network)
         self.signing_key = signing_key
-        self.utxos = self.fetch_utxos()
+        self.utxo_tx_ins = self.fetch_utxos()
 
     def get_address(self, address):
         return self.esplora_client.get_address(address)
     
     def fetch_utxos(self):
         utxos = self.esplora_client.get_address_utxos(self.address)
+        tx_ins = []
         for utxo in utxos:
             txid = utxo["txid"]
             prev_index = utxo["vout"]
             txin = TxIn(prev_tx=txid, prev_index=prev_index)
             txin._script_pubkey = self.script_pubkey
             txin._value = utxo["value"]
-            self.utxos.append(txin)
+            tx_ins.append(txin)
         print(f"Found {len(utxos)} UTXOs for {self.address}")
-        return utxos
+        return tx_ins
     
     def add_funding_tx(self, funding_tx):
         print("Adding funding TX")
@@ -35,16 +36,16 @@ class AddressManager():
                 tx_in = TxIn(prev_tx=funding_tx.hash(), prev_index=index)
                 tx_in._script_pubkey = tx_out.script_pubkey
                 tx_in._value = tx_out.amount
-                self.utxos.append(tx_in)
+                self.utxo_tx_ins.append(tx_in)
     
     def send_to_address(self, address, amount):
         tx_fee = 350
-        if len(self.utxos) == 0:
+        if len(self.utxo_tx_ins) == 0:
             raise Exception(f"No UTXOs, fund address {self.address}")
         
         tx_ins = []
         total_value = 0
-        for utxo in self.utxos:
+        for utxo in self.utxo_tx_ins:
             total_value += utxo.value()
             if total_value >= amount + tx_fee:
                 break
@@ -63,5 +64,5 @@ class AddressManager():
         tx_hex = tx.serialize().hex()
         tx_id = self.esplora_client.broadcast_tx(tx_hex)
         print(f"Sent {amount} to {address} with txid {tx_id}")
-        self.utxos = self.fetch_utxos()
+        self.utxo_tx_ins = self.fetch_utxos()
         return tx_id
