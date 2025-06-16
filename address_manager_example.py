@@ -50,16 +50,16 @@ async def test_beacon_manager():
 
     bitcoinrpc = BitcoinRPC.from_config(regtest_api, ("polaruser", "polarpass"))
 
-    # result = await bitcoinrpc.acall("send", {"outputs": { address: 0.2}})
+    result = await bitcoinrpc.acall("send", {"outputs": { address: 0.2}})
 
-    # funding_txid = result["txid"]
-    # funding_tx_hex = await bitcoinrpc.acall("getrawtransaction", {"txid": funding_txid})
-    # funding_tx = Tx.parse_hex(funding_tx_hex)
+    funding_txid = result["txid"]
+    funding_tx_hex = await bitcoinrpc.acall("getrawtransaction", {"txid": funding_txid})
+    funding_tx = Tx.parse_hex(funding_tx_hex)
 
-    # print("funding tx", funding_tx.id())
+    print("funding tx", funding_tx.id())
     
-    # # address_manager.utxo_tx_ins = address_manager.fetch_utxos()
-    # address_manager.add_funding_tx(funding_tx)
+    # address_manager.utxo_tx_ins = address_manager.fetch_utxos()
+    address_manager.add_funding_tx(funding_tx)
 
 
     beacon_sk = root_hdpriv.get_private_key(didkey_purpose, address_num=3)

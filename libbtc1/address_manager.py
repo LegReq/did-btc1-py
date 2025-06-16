@@ -118,9 +118,14 @@ class AddressManager():
             tx_id = self.esplora_client.broadcast_tx(tx_hex)
             print(f"Sent {amount} to {address} with txid {tx_id}")
             # Refresh UTXOs after successful broadcast
-            self.utxo_tx_ins = self.fetch_utxos()
+            new_utxo_txin = TxIn(prev_tx=tx.hash(), prev_index=0)
+            new_utxo_txin._script_pubkey = refund_out.script_pubkey
+            new_utxo_txin._value = refund_out.amount
+            self.utxo_tx_ins.append(new_utxo_txin)
+
             return tx_id
         except Exception as e:
             print(f"Failed to broadcast transaction: {e}")
             print(f"Transaction hex: {tx_hex}")
             raise
+
