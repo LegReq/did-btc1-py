@@ -5,7 +5,7 @@ with open('requirements.txt') as f:
 
 setup(
     name='libbtc1',
-    version='0.2.6=7',
+    version='0.2.7',
     packages=find_packages(),
     install_requires=requirements,
     author='Will Abramson',
