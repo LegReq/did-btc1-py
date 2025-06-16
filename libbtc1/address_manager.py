@@ -1,5 +1,6 @@
 from buidl.tx import TxIn, Tx, TxOut
 from buidl.script import address_to_script_pubkey
+from buidl.helpers import hex_to_bytes
 
 class AddressManager():
 
@@ -20,10 +21,11 @@ class AddressManager():
         for utxo in utxos:
             txid = utxo["txid"]
             prev_index = utxo["vout"]
-            txin = TxIn(prev_tx=txid, prev_index=prev_index)
+            txin = TxIn(prev_tx=hex_to_bytes(txid), prev_index=prev_index)
             txin._script_pubkey = self.script_pubkey
             txin._value = utxo["value"]
             tx_ins.append(txin)
+            # txin.serialize()
         print(f"Found {len(utxos)} UTXOs for {self.address}")
         return tx_ins
     
