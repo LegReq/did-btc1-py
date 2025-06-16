@@ -62,6 +62,7 @@ class AddressManager():
 
         tx_hex = tx.serialize().hex()
         tx_id = self.esplora_client.broadcast_tx(tx_hex)
+        print("tx_hex", tx_hex)
         print(f"Sent {amount} to {address} with txid {tx_id}")
         self.utxo_tx_ins = self.fetch_utxos()
         return tx_id
