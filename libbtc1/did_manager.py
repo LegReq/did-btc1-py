@@ -13,6 +13,7 @@ from buidl.ecc import PrivateKey
 import json
 from .beacon_manager import BeaconManager
 from .esplora_client import EsploraClient
+from .resolver import Btc1Resolver
 
 class DIDManager():
 
@@ -26,19 +27,19 @@ class DIDManager():
         self.network = network
 
 
-    async def create_deterministic(self, initial_sk, network="bitcoin", version=1):
+    async def create_deterministic(self, initial_sk, network="bitcoin", identifierVersion=1):
         if network not in NETWORKS:
             raise Exception(f"Invalid Network : {network}")
         
         if network != self.network:
             raise Exception("Manager for different network")
 
-        if version not in VERSIONS:
-            raise Exception(f"Invalid Version : {version}")
+        if identifierVersion not in VERSIONS:
+            raise Exception(f"Invalid Version : {identifierVersion}")
         
         public_key = initial_sk.point
 
-        builder = Btc1DIDDocumentBuilder.from_secp256k1_key(public_key, network, version)
+        builder = Btc1DIDDocumentBuilder.from_secp256k1_key(public_key, network, identifierVersion)
 
         did_document = builder.build()
 
@@ -158,3 +159,24 @@ class DIDManager():
 
         return sidecarData
     
+
+    def serialize(self):
+        did_manager_data = {
+            "did": self.did,
+            "version": self.version,
+            "signalsMetadata": self.signals_metadata
+        }
+        if self.initial_document:
+            did_manager_data["initialDocument"] = self.initial_document.serialize()
+        return did_manager_data
+
+    # @classmethod
+    # def from_did(cls, did, sidecar_data, esplora_base="http://localhost:3000"):
+    #     resolver = Btc1Resolver(esplora_base)
+    #     resolution_options = {
+    #         "sidecarData": sidecar_data
+    #     }
+    #     did, did_doc = resolver.resolve(did, resolution_options)
+
+    #     did_manager = cls(did_doc.network, esplora_base)
+    #     return did, did_doc

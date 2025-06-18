@@ -36,20 +36,37 @@ P2PKH = "p2pkh"
 P2WPKH = "p2wpkh"
 P2TR = "p2tr"
 
+DEFAULT_NETWORK_DEFINITIONS = {
+    "regtest": {
+        "btc_network": "regtest",
+        "esplora_api": "http://localhost:3000",
+    }
+}
+
 
 class Btc1Resolver():
     
-    def __init__(self, esplora_base="http://localhost:3000", logging=False, log_folder="TestVectors"):
-        self.esplora_client = EsploraClient(esplora_base)
+    def __init__(self, networkDefinitions=DEFAULT_NETWORK_DEFINITIONS, logging=False, log_folder="TestVectors"):
         self.logging = logging
         self.log_base_folder = log_folder
+        self.networks = self.configure_networks(networkDefinitions)
 
-
+    def configure_networks(self, networkDefinitions):
+        networks = {}
+        for network, networkDefinition in networkDefinitions.items():
+            definition = {
+                "btc_network": networkDefinition.get("btc_network"),
+                "esplora_client": EsploraClient(networkDefinition.get("esplora_api")),
+            }
+            networks[network] = definition
+        return networks
 
     async def resolve(self, identifier, resolution_options=None):
     
-
         id_type, version, network, genesis_bytes = decode_identifier(identifier)
+
+        if not self.networks.get(network):
+            raise Exception("Unsupported Network")
 
         print("ID Components", id_type, version, network, genesis_bytes.hex())
 
@@ -276,10 +293,10 @@ class Btc1Resolver():
 
     async def find_next_signals(self, beacons, contemporary_blockheight, network):
         signals = []
-
+        esplora_client = self.networks[network]["esplora_client"]
         for beacon in beacons:
             address = beacon.address()
-            txs = self.esplora_client.get_address_transactions(address)
+            txs = esplora_client.get_address_transactions(address)
             for tx_data in txs:
             # Only care about bitcoin transactions that have been accepted into the chain.
 
@@ -290,7 +307,7 @@ class Btc1Resolver():
                     continue
 
                 if any(vin['prevout']['scriptpubkey_address'] == address for vin in tx_data['vin']):
-                    tx_hex = self.esplora_client.get_transaction_hex(tx_data['txid'])
+                    tx_hex = esplora_client.get_transaction_hex(tx_data['txid'])
                     tx = Tx.parse_hex(tx_hex)
                     signal = {
                         "beaconId": beacon.id,

@@ -11,12 +11,13 @@ class AddressManager():
         self.address = script_pubkey.address(network)
         self.signing_key = signing_key
         self.utxo_tx_ins = self.fetch_utxos()
+        self.tx_fee = 4000
     
     def fetch_utxos(self):
         utxos = self.esplora_client.get_address_utxos(self.address)
         tx_ins = []
         print("utxos", utxos)
-        utxos = [utxo for utxo in utxos if utxo["status"]["confirmed"]]
+        # utxos = [utxo for utxo in utxos if utxo["status"]["confirmed"]]
         for utxo in utxos:
             txid = bytes.fromhex(utxo["txid"])
             prev_index = utxo["vout"]
@@ -45,7 +46,7 @@ class AddressManager():
     
     def send_to_address(self, script_pubkey, amount):
         address = script_pubkey.address(network=self.network)
-        tx_fee = 4000  # satoshis
+        tx_fee = self.tx_fee  # satoshis
         
         # Validate amount
         if amount <= 0:
