@@ -6,7 +6,7 @@ import base58
 import jcs
 
 
-async def resolve_signet():
+async def resolve_did():
   
     networkDefinitions = {  
         "regtest": {
@@ -23,8 +23,8 @@ async def resolve_signet():
         }
     }
 
-    # test_folder_path = "TestVectors/regtest/k1qgp5h79scv4sfqkzak5g6y89dsy3cq0pd2nussu2cm3zjfhn4ekwrucc4q7t7"
-    test_folder_path = "TestVectors/signet/x1qyj23twdpn927d5ky2f5ulgmr9uudq2pd08gxy05fdjzxvfclzn2zazps8w"
+    test_folder_path = "TestVectors/regtest/k1qgp5h79scv4sfqkzak5g6y89dsy3cq0pd2nussu2cm3zjfhn4ekwrucc4q7t7"
+    # test_folder_path = "TestVectors/signet/x1qyj23twdpn927d5ky2f5ulgmr9uudq2pd08gxy05fdjzxvfclzn2zazps8w"
 
     with open(f"{test_folder_path}/did.txt", 'r') as f:
         # Read the contents of the file into a variable
@@ -45,11 +45,11 @@ async def resolve_signet():
 
     resolver = Btc1Resolver(networkDefinitions=networkDefinitions, logging=True)
     print(resolver.logging)
-    document = await resolver.resolve(did_to_resolve, resolution_options)
+    resolution_result = await resolver.resolve(did_to_resolve, resolution_options)
 
     print("Resolved Document")
-    print(json.dumps(document.serialize(), indent=2))
+    print(json.dumps(resolution_result, indent=2))
 
 
 
-asyncio.run(resolve_signet())
+asyncio.run(resolve_did())

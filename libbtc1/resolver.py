@@ -92,7 +92,18 @@ class Btc1Resolver():
         print("Initial DID document")
         print(json.dumps(initial_did_document.serialize(), indent=2))
         target_document = await self.resolve_target_document(initial_did_document, resolution_options, network)
-        return target_document
+
+        resolutionResult = {
+            "didDocument": target_document.serialize(),
+            "didResolutionMetadata": {
+                "network": network,
+            },
+            "didDocumentMetadata": {
+
+            }
+        }
+
+        return resolutionResult
 
 
 
