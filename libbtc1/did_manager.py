@@ -4,7 +4,7 @@ import jcs
 from buidl.helper import sha256
 from pydid.doc import DIDDocument
 from .did import PLACEHOLDER_DID
-from .diddoc.doc import IntermediateBtc1DIDDocument
+from .diddoc.doc import IntermediateBtc1DIDDocument, Btc1Document
 from .diddoc.builder import Btc1DIDDocumentBuilder
 from .diddoc.updater import Btc1DIDDocumentUpdater
 from buidl.tx import Tx, TxIn, TxOut, SIGHASH_DEFAULT
@@ -15,23 +15,26 @@ from .beacon_manager import BeaconManager
 from .esplora_client import EsploraClient
 from .resolver import Btc1Resolver
 
+
+
 class DIDManager():
 
-    def __init__(self, network, esplora_base="http://localhost:3000"):
+    def __init__(self, did_network, btc_network, esplora_base="http://localhost:3000"):
         
         self.esplora_client = EsploraClient(esplora_base)
         self.pending_updates = []
         self.initial_document = None
         self.beacon_managers = {}
         self.did = None
-        self.network = network
+        self.did_network = did_network
+        self.btc_network = btc_network
 
 
     async def create_deterministic(self, initial_sk, network="bitcoin", identifierVersion=1):
         if network not in NETWORKS:
             raise Exception(f"Invalid Network : {network}")
         
-        if network != self.network:
+        if network != self.did_network:
             raise Exception("Manager for different network")
 
         if identifierVersion not in VERSIONS:
@@ -43,7 +46,7 @@ class DIDManager():
 
         did_document = builder.build()
 
-        for beacon in did_document.service:
+        for beacon in did_document.beacon_services():
             if "P2PKH" in beacon.id.fragment:
                 script_pubkey = public_key.p2pkh_script()
                 self.add_beacon_manager(beacon.id, initial_sk, script_pubkey)
@@ -64,7 +67,7 @@ class DIDManager():
         if network not in NETWORKS:
             raise Exception(f"Invalid Network : {network}")
         
-        if network != self.network:
+        if network != self.did_network:
             raise Exception("Manager for different network")
 
         if version not in VERSIONS:
@@ -141,7 +144,7 @@ class DIDManager():
         if beacon_id in self.beacon_managers:
             raise Exception("Beacon already exists")
         
-        bm = BeaconManager(self.network, beacon_id, initial_sk, script_pubkey, self.esplora_client)
+        bm = BeaconManager(self.btc_network, beacon_id, initial_sk, script_pubkey, self.esplora_client)
         self.beacon_managers[beacon_id] = bm
         return bm
 
@@ -163,20 +166,42 @@ class DIDManager():
     def serialize(self):
         did_manager_data = {
             "did": self.did,
+            "document": self.document.serialize(),
             "version": self.version,
-            "signalsMetadata": self.signals_metadata
+            "sidecarData": self.get_sidecar_data()
         }
-        if self.initial_document:
-            did_manager_data["initialDocument"] = self.initial_document.serialize()
+
         return did_manager_data
+    
+    
 
-    # @classmethod
-    # def from_did(cls, did, sidecar_data, esplora_base="http://localhost:3000"):
-    #     resolver = Btc1Resolver(esplora_base)
-    #     resolution_options = {
-    #         "sidecarData": sidecar_data
-    #     }
-    #     did, did_doc = resolver.resolve(did, resolution_options)
+    @classmethod
+    def from_did(cls, did_data, did_network, btc_network, keystore, esplora_base="http://localhost:3000"):
 
-    #     did_manager = cls(did_doc.network, esplora_base)
-    #     return did, did_doc
+        did = did_data["did"]
+        sidecar_data = did_data["sidecarData"]
+        signals_metadata = sidecar_data.get("signalsMetadata", {})
+        initial_document = sidecar_data.get("initialDocument", None)
+        document = did_data["document"]
+        version = did_data["version"]
+
+        did_manager = cls(did_network, btc_network, esplora_base)
+
+        did_manager.did = did
+        did_manager.document = Btc1Document.deserialize(document)
+
+        did_manager.version = version
+        did_manager.signals_metadata = signals_metadata
+        did_manager.initial_document = initial_document
+
+
+        for beacon in did_manager.document.beacon_services():
+            beacon_sk = keystore.get_key(beacon.id)
+            if not beacon_sk:
+                raise Exception("Beacon key not found")
+            
+            address = beacon.address()
+            script_pubkey = address_to_script_pubkey(address, btc_network)
+            did_manager.add_beacon_manager(beacon.id, beacon_sk, script_pubkey)             
+
+        return did_manager

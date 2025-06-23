@@ -23,8 +23,9 @@ async def resolve_did():
         }
     }
 
-    test_folder_path = "TestVectors/regtest/k1qgp5h79scv4sfqkzak5g6y89dsy3cq0pd2nussu2cm3zjfhn4ekwrucc4q7t7"
+    # test_folder_path = "TestVectors/regtest/k1qgp5h79scv4sfqkzak5g6y89dsy3cq0pd2nussu2cm3zjfhn4ekwrucc4q7t7"
     # test_folder_path = "TestVectors/signet/x1qyj23twdpn927d5ky2f5ulgmr9uudq2pd08gxy05fdjzxvfclzn2zazps8w"
+    test_folder_path = "TestVectors/mutinynet/k1q5pa5tq86fzrl0ez32nh8e0ks4tzzkxnnmn8tdvxk04ahzt70u09dag02h0cp"
 
     with open(f"{test_folder_path}/did.txt", 'r') as f:
         # Read the contents of the file into a variable
@@ -50,6 +51,8 @@ async def resolve_did():
     print("Resolved Document")
     print(json.dumps(resolution_result, indent=2))
 
+    with open(f"{test_folder_path}/resolutionResult.json", "w") as f:
+        json.dump(resolution_result, f, indent=2)
 
 
 asyncio.run(resolve_did())

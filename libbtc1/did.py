@@ -11,8 +11,9 @@ SIGNET="signet"
 TESTNET3="testnet3"
 TESTNET4="testnet4"
 REGTEST="regtest"
+MUTINYNET="mutinynet"
 
-NETWORKS = [BITCOIN, SIGNET, REGTEST, TESTNET3, TESTNET4, None, None, None, 1, 2, 3, 4, 5, 6, 7, 8]
+NETWORKS = [BITCOIN, SIGNET, REGTEST, TESTNET3, TESTNET4, MUTINYNET, None, None, None, None, None, None, 1, 2, 3, 4]
 
 VERSIONS = [1]
 
@@ -33,6 +34,7 @@ network_map = {
     0x2: "regtest",
     0x3: "testnet3",
     0x4: "testnet4",
+    0x5: "mutinynet",
 }
 
 
@@ -166,8 +168,8 @@ def decode_identifier(identifier):
     network = network_map.get(network_value)
 
     if not network:
-        if 0x8 <= network_value <= 0xF:
-            network = network_value - 7
+        if 0xC <= network_value <= 0xF:
+            network = network_value - 0xB
         else:
             raise InvalidDidError()
 

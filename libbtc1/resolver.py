@@ -91,19 +91,24 @@ class Btc1Resolver():
         # TODO: Process Beacon Signals
         print("Initial DID document")
         print(json.dumps(initial_did_document.serialize(), indent=2))
-        target_document = await self.resolve_target_document(initial_did_document, resolution_options, network)
+        target_document, version_id = await self.resolve_target_document(initial_did_document, resolution_options, network)
 
-        resolutionResult = {
+
+        print("Target DID document")
+        print(target_document)
+
+        resolution_result = {
             "didDocument": target_document.serialize(),
             "didResolutionMetadata": {
-                "network": network,
+                
             },
             "didDocumentMetadata": {
-
+                "network": network,
+                "version": version_id
             }
         }
 
-        return resolutionResult
+        return resolution_result
 
 
 
@@ -179,7 +184,7 @@ class Btc1Resolver():
         current_version_id = 1
 
         if current_version_id == request_version_id:
-            return initial_document
+            return initial_document, current_version_id
         
         update_hash_history = []
 
@@ -187,7 +192,7 @@ class Btc1Resolver():
 
         contemporary_document = initial_document.model_copy()
 
-        target_document = await self.traverse_blockchain_history(contemporary_document, 
+        target_document, current_version_id = await self.traverse_blockchain_history(contemporary_document, 
                                                            contemporary_blockheight, 
                                                            current_version_id, 
                                                            request_version_id, 
@@ -196,7 +201,7 @@ class Btc1Resolver():
                                                            signals_metadata, 
                                                            network)
 
-        return target_document
+        return target_document, current_version_id
 
     
 
@@ -219,12 +224,12 @@ class Btc1Resolver():
         next_signals = await self.find_next_signals(beacons, contemporary_blockheight, network)
         print("Next Signals", next_signals)
         if len(next_signals) == 0:
-            return contemporary_document
+            return contemporary_document, current_version_id
         
         
         # print("Next Signals", next_signals[0]['status']["block_time"], target_time)
         if next_signals[0]["block_time"] > target_time:
-            return contemporary_document
+            return contemporary_document, current_version_id
         
         
 
@@ -278,7 +283,7 @@ class Btc1Resolver():
                 contemporary_hash = bytes_to_str(base58.b58encode(contemporary_document.canonicalize()))
                 if current_version_id == request_version_id:
                     print("Found document for target version", contemporary_document)
-                    return contemporary_document
+                    return contemporary_document, current_version_id
 
             elif target_version_id > current_version_id + 1:
                 print(target_version_id, current_version_id)
@@ -291,7 +296,7 @@ class Btc1Resolver():
         
         contemporary_blockheight += 1
 
-        target_document = await self.traverse_blockchain_history(contemporary_document,
+        target_document, current_version_id = await self.traverse_blockchain_history(contemporary_document,
                                                             contemporary_blockheight,
                                                             current_version_id,
                                                             request_version_id,
@@ -300,7 +305,7 @@ class Btc1Resolver():
                                                             signals_metadata,
                                                             network)
 
-        return target_document
+        return target_document, current_version_id
 
     async def find_next_signals(self, beacons, contemporary_blockheight, network):
         signals = []

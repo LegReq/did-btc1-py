@@ -1,6 +1,6 @@
 from pydid.doc.doc import DIDDocument, PossibleServiceTypes
 from pydid.did import DID, DIDUrl
-from ..service import ServiceBeaconTypes, SingletonBeaconService, SMTAggregateBeaconService, CIDAggregateBeaconService
+from ..service import ServiceBeaconTypes, SingletonBeaconService, SMTAggregateBeaconService, CIDAggregateBeaconService, BeaconTypeNames
 from ..did import PLACEHOLDER_DID
 from buidl.helper import sha256
 import jcs
@@ -20,6 +20,11 @@ class Btc1Document(DIDDocument):
     def canonicalize(self):
         return sha256(jcs.canonicalize(self.serialize()))
         
+
+    def beacon_services(self):
+        return [service for service in self.service if service.type in BeaconTypeNames]
+    
+
     # service: Optional[List[ServiceBeaconTypes]] = None
 
     # @classmethod

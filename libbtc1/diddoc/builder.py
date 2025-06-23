@@ -78,6 +78,8 @@ class Btc1DIDDocumentBuilder(DIDDocumentBuilder):
             network = "mainnet"
         if network == "testnet3" or network == "testnet4":
             network = "testnet"
+        if network == "mutinynet":
+            network = "signet"
         elif isinstance(network, int):
             # TODO: what should network be when custom?
             network = "signet"

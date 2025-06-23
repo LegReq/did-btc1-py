@@ -38,7 +38,7 @@ class DIDTest(TestCase):
                 "identifier_components": {
                     "id_type": KEY,
                     "version": 1,
-                    "network": 5,
+                    "network": 1,
                     "genesis_bytes": bytes.fromhex("021fd28f958722fd58ee53e56ca7b444a22d89b4985e256c8dd7699e74a97c5c39")
                 }
             },
@@ -67,6 +67,15 @@ class DIDTest(TestCase):
                     "version": 1,
                     "network": "testnet4",
                     "genesis_bytes": bytes.fromhex("be0db3aeee89da24d50112af74f40c6a27f84fd3ef1a280647f5448f4daf11b1")
+                }
+            },
+            {
+                "did": "did:btc1:k1q5p4f9a0af7qtj83apkdd96zhlhk3ndhv3reu75lju503s82qkslvfgl7pq9r",
+                "identifier_components": {
+                    "id_type": KEY,
+                    "network": "mutinynet",
+                    "genesis_bytes": bytes.fromhex("035497afea7c05c8f1e86cd69742bfef68cdb764479e7a9f9728f8c0ea05a1f625"),
+                    "version": 1
                 }
             }
         ]
