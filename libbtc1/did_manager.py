@@ -82,8 +82,6 @@ class DIDManager():
 
         did_document = intermediate_document.to_did_document(identifier)
         
-        print(json.dumps(did_document.serialize(), indent=2))
-
         self.did = did_document.id
         self.version = 1
         self.initial_document = did_document.model_copy(deep=True)

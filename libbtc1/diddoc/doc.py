@@ -74,7 +74,6 @@ class IntermediateBtc1DIDDocument(Btc1Document):
 
         if did_document.verification_method:
             for index, vm in enumerate(did_document.verification_method):
-                print(vm)
                 if PLACEHOLDER_DID in vm.id:
                     vm.id = DIDUrl.unparse(did, vm.id.path, vm.id.query, vm.id.fragment)
                 if vm.controller == PLACEHOLDER_DID:
