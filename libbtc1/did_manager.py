@@ -19,7 +19,7 @@ from .resolver import Btc1Resolver
 
 class DIDManager():
 
-    def __init__(self, did_network, btc_network, esplora_base="http://localhost:3000"):
+    def __init__(self, did_network, btc_network = None, esplora_base="http://localhost:3000"):
         
         self.esplora_client = EsploraClient(esplora_base)
         self.pending_updates = []
@@ -27,7 +27,7 @@ class DIDManager():
         self.beacon_managers = {}
         self.did = None
         self.did_network = did_network
-        self.btc_network = btc_network
+        self.btc_network = btc_network if btc_network is not None else did_network
 
 
     async def create_deterministic(self, initial_sk, network="bitcoin", identifierVersion=1):

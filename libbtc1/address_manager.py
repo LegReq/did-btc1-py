@@ -14,22 +14,26 @@ class AddressManager():
         self.tx_fee = 4000
     
     def fetch_utxos(self):
-        utxos = self.esplora_client.get_address_utxos(self.address)
         tx_ins = []
-        print("utxos", utxos)
-        # utxos = [utxo for utxo in utxos if utxo["status"]["confirmed"]]
-        for utxo in utxos:
-            txid = bytes.fromhex(utxo["txid"])
-            prev_index = utxo["vout"]
-            print("txid", txid)
-            print("prev_index", prev_index)
-            print("value", utxo["value"])
-            print("utxo", utxo)
-            txin = TxIn(prev_tx=txid, prev_index=prev_index)
-            txin._script_pubkey = self.script_pubkey
-            txin._value = utxo["value"]
-            tx_ins.append(txin)
-        print(f"Found {len(utxos)} UTXOs for {self.address}")
+        try:
+            utxos = self.esplora_client.get_address_utxos(self.address)
+            
+            print("utxos", utxos)
+            # utxos = [utxo for utxo in utxos if utxo["status"]["confirmed"]]
+            for utxo in utxos:
+                txid = bytes.fromhex(utxo["txid"])
+                prev_index = utxo["vout"]
+                print("txid", txid)
+                print("prev_index", prev_index)
+                print("value", utxo["value"])
+                print("utxo", utxo)
+                txin = TxIn(prev_tx=txid, prev_index=prev_index)
+                txin._script_pubkey = self.script_pubkey
+                txin._value = utxo["value"]
+                tx_ins.append(txin)
+            print(f"Found {len(utxos)} UTXOs for {self.address}")
+        except Exception as e:
+            print(f"Error fetching UTXOs: {e}")
         return tx_ins
     
     def add_funding_tx(self, funding_tx):

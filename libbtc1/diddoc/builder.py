@@ -56,7 +56,6 @@ class Btc1DIDDocumentBuilder(DIDDocumentBuilder):
 
         builder = cls(
             id=did_btc1,
-            controller=[did_btc1],
         )
 
         vm_id = "initialKey"
